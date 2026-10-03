@@ -45,7 +45,9 @@ export function fitLines(state) {
   const td = state?.target_definition;
   if (!td || td.basis !== "current_definition") return { compatible: null, lines: [] };
   if (td.compatible) return { compatible: true, lines: ["This fits what your company targets."] };
-  const lines = ["This goal is outside what your company targets, so it cannot be confirmed as it is."];
+  const problems = (Array.isArray(td.findings) ? td.findings : []).filter((x) => x.status !== "within" && x.status !== "inherited");
+  const onlyNotSet = problems.length > 0 && problems.every((x) => x.status === "no_definition");
+  const lines = [onlyNotSet ? "Your company has not said who it targets yet, so this goal cannot be confirmed yet." : "This goal is outside what your company targets, so it cannot be confirmed as it is."];
   for (const x of Array.isArray(td.findings) ? td.findings : []) {
     if (x.status === "within" || x.status === "inherited") continue;
     const what = PLURAL[x.criterion] ?? "targets";

@@ -98,6 +98,7 @@ export function createAddGoal(ctx) {
         u.missing.length ? h("div", { class: "notice warn", text: "Ava still needs to know the kind of company or the place. Change your words and check again." }) : null,
         fit.compatible === true ? h("div", { class: "notice", text: fit.lines[0] }) : null,
         fit.compatible === false ? h("div", { class: "notice bad" }, fit.lines.map((l) => h("p", { text: l }))) : null,
+        fit.compatible === false && ctx.openTargets ? h("button", { class: "btn ghost block", type: "button", onclick: ctx.openTargets }, "Set who you target") : null,
         note(a.notice)),
       h("div", { class: "card" },
         h("p", { class: "strong", text: "Nothing has started. Ava will only begin once you confirm and the goal is ready." }),

@@ -28,3 +28,29 @@ export async function loadCompany(orgId) {
     loadedAt: Date.now(),
   };
 }
+
+/** What the company has set as its targets today (confirmed versions only). Not fatal: if it cannot be read, the screens say so. */
+export async function loadTargets(orgId) {
+  if (!UUID.test(orgId)) return { ok: false };
+  const k = await select(`organizational_knowledge?org_id=eq.${orgId}&slot_key=in.(target_industries,target_geographies)&select=id,slot_key,status`);
+  if (!k.ok || !Array.isArray(k.data)) return { ok: false };
+  let versions = [];
+  const ids = k.data.map((x) => x.id).filter((x) => UUID.test(x));
+  if (ids.length) {
+    const v = await select(`organizational_knowledge_versions?knowledge_id=in.(${ids.join(",")})&status=eq.confirmed&select=knowledge_id,version_no,value,confirmed_at`);
+    if (!v.ok || !Array.isArray(v.data)) return { ok: false };
+    versions = v.data;
+  }
+  const pick = (slot) => {
+    const row = k.data.find((x) => x.slot_key === slot && x.status !== "retired");
+    const ver = row && versions.find((x) => x.knowledge_id === row.id);
+    return ver && Array.isArray(ver.value) ? { values: ver.value.filter((x) => typeof x === "string"), version_no: ver.version_no, confirmed_at: ver.confirmed_at } : null;
+  };
+  return { ok: true, industries: pick("target_industries"), geographies: pick("target_geographies") };
+}
+
+/** The platform's own known list of kinds of company and places (readable by any signed-in person). */
+export async function loadVocabulary() {
+  const r = await select("platform_vocabulary_terms?select=kind,term_key,label,parent_key,depth&order=kind,depth,term_key");
+  return r.ok && Array.isArray(r.data) ? r.data : null;
+}

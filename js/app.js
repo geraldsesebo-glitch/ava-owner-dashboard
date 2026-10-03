@@ -3,10 +3,11 @@
 // Branches do not exist in the database yet: "Main" is only a label for the one place everything lives today. Nothing about branches is invented here.
 import { HELPERS } from "./config.js";
 import { signIn, signOut, isSignedIn, onSignedOut, rpc, callHelper } from "./api.js";
-import { loadCompanies, loadCompany } from "./data.js";
+import { loadCompanies, loadCompany, loadTargets } from "./data.js";
 import { companyKind, plainReason, runSentence, dispositionLabel, candidateReason, fitSentence, capabilityLabel, goalStatusLabel, goalCriteriaLine, eventSentence, timeAgo, homeStatus } from "./text.js";
 import { icon } from "./icons.js";
 import { createAddGoal } from "./addgoal.js";
+import { createTargets } from "./targets.js";
 
 const $ = (id) => document.getElementById(id);
 const STALE_RUN_MS = 10 * 60 * 1000;
@@ -23,6 +24,7 @@ const SECTIONS = [
   { id: "pipeline", label: "Pipeline", icon: "pipeline", built: false },
   { id: "history", label: "History", icon: "history", built: true },
   { id: "addgoal", label: "Add goal", icon: "plus", built: true, hidden: true },
+  { id: "targets", label: "Who you target", icon: "goals", built: true, hidden: true },
 ];
 const SOON = {
   outreach: "Ava will write first messages to the companies she found, and wait for your OK before anything is sent.",
@@ -31,9 +33,11 @@ const SOON = {
 };
 const TABS = ["home", "goals", "companies", "history", "more"];
 
-const state = { companies: [], orgId: null, data: null, section: "home", itemId: null, filter: "found", historyAll: false, query: "", busy: false, runMessage: null, sheet: null, theme: loadTheme(), loadId: 0, loadError: null, addGoal: null };
+const state = { companies: [], orgId: null, data: null, section: "home", itemId: null, filter: "found", historyAll: false, query: "", busy: false, runMessage: null, sheet: null, theme: loadTheme(), loadId: 0, loadError: null, addGoal: null, targets: null };
 // the Add goal screen (uses only the existing goal reader and its confirm step)
-const addGoal = createAddGoal({ h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), call: callHelper });
+const addGoal = createAddGoal({ h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), call: callHelper, openTargets: () => targets.open() });
+// the "Who you target" screen (uses only the existing owner-only set_knowledge path)
+const targets = createTargets({ h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), rpc });
 
 // ---- small helpers ------------------------------------------------------------------------------------------------------------------------
 function h(tag, props, ...kids) {
@@ -120,10 +124,10 @@ function currentItem() {
 }
 
 // ---- navigation ---------------------------------------------------------------------------------------------------------------------------
-function go(section, itemId = null) { if (section !== "addgoal") state.addGoal = null; state.section = section; state.itemId = itemId; state.query = ""; state.sheet = null; render(); $("main").scrollTop = 0; $("list").scrollTop = 0; }
+function go(section, itemId = null) { if (section !== "addgoal") state.addGoal = null; if (section !== "targets") state.targets = null; state.section = section; state.itemId = itemId; state.query = ""; state.sheet = null; render(); $("main").scrollTop = 0; $("list").scrollTop = 0; }
 function pane() {
   const sec = SECTIONS.find((s) => s.id === state.section);
-  if (state.section === "home" || state.section === "addgoal" || !sec.built) return "main";
+  if (state.section === "home" || state.section === "addgoal" || state.section === "targets" || !sec.built) return "main";
   return state.itemId ? "main" : "list";
 }
 
@@ -163,7 +167,7 @@ function listHead(title, { search = false, chips = null } = {}) {
 const soonBadge = () => h("span", { class: "badge soon", text: "Coming soon" });
 
 function renderList() {
-  const s = state.section === "addgoal" ? "goals" : state.section, sec = SECTIONS.find((x) => x.id === s);
+  const s = state.section === "addgoal" || state.section === "targets" ? "goals" : state.section, sec = SECTIONS.find((x) => x.id === s);
   if (!state.data) { fill($("list"), listHead(sec.label), h("div", { class: "list-body" }, h("p", { class: "empty", text: "Loading…" }))); return; }
   if (s === "home") {
     const f = facts(), ev = headlineEvents().slice(0, 6);
@@ -263,6 +267,16 @@ function messageBox(m) {
 function tile(label, ic, onclick, { soon = false, danger = false, disabled = false } = {}) {
   return h("button", { class: `tile${danger ? " danger" : ""}`, type: "button", disabled, onclick }, h("span", { class: "ic" }, icon(ic, 28)), h("span", { text: label }), soon ? h("span", { class: "flag", text: "Soon" }) : null);
 }
+function targetsCard() {
+  const t = state.data.targets;
+  const both = t?.ok && t.industries && t.geographies;
+  return h("div", { class: "card" },
+    h("div", { class: "row2" }, h("h3", { text: "Who you target" }), t?.ok ? h("span", { class: `badge ${both ? "good" : "warn"}`, text: both ? "Set" : "Not set yet" }) : null),
+    t?.ok
+      ? h("p", { class: "muted", text: both ? `Kinds of company: ${t.industries.values.join(", ")}. Places: ${t.geographies.values.join(", ")}.` : "Goals cannot be confirmed until you choose the kinds of company and the places Ava may search." })
+      : h("p", { class: "muted", text: "Could not read this just now." }),
+    h("button", { class: both ? "btn ghost block" : "btn primary block", type: "button", onclick: () => targets.open() }, both ? "Change who you target" : "Choose who you target"));
+}
 function goalCard(g) {
   return h("button", { class: "card item", type: "button", onclick: () => go("goals", g.id) },
     h("span", { class: "row2" }, h("span", { class: "t", text: clip(g.source_goal_text, 120) }), h("span", { class: `badge ${g.status === "confirmed" ? "good" : g.status === "cancelled" ? "" : "warn"}`, text: goalStatusLabel(g.status) })),
@@ -292,6 +306,7 @@ function renderHome() {
     messageBox(state.runMessage),
     h("div", { class: "row2" }, h("h3", { text: "Your goals" }), f.goals.length > 3 ? h("button", { class: "textbtn", type: "button", onclick: () => go("goals") }, `See all ${f.goals.length} ›`) : null),
     f.goals.length === 0 ? h("div", { class: "card empty" }, h("p", { text: "No goals yet." }), h("button", { class: "btn primary", type: "button", onclick: () => addGoal.open() }, "Add your first goal")) : f.goals.slice(0, 3).map(goalCard),
+    targetsCard(),
     h("h3", { text: "New companies" }),
     h("div", { class: "card" }, newCos.length === 0 ? h("p", { class: "muted", text: "None found yet." }) : h("div", { class: "cardlist" }, newCos.map((c) => h("button", { class: "li linkrow", type: "button", onclick: () => { state.filter = "found"; go("companies", c.id); } },
       h("div", { class: "row2" }, h("strong", { text: clip(candOf(c).name, 70) || "(no name)" }), h("span", { class: "badge good", text: "New" })),
@@ -358,6 +373,7 @@ function renderMain() {
   const err = state.loadError ? h("div", { class: "notice bad loaderr", role: "alert", text: state.loadError }) : null;
   if (!state.data) { fill($("main"), err, h("p", { class: "empty", text: state.loadError ? "" : "Loading…" })); return; }
   if (s === "addgoal") { fill($("main"), err, addGoal.render()); return; }
+  if (s === "targets") { fill($("main"), err, targets.render()); return; }
   let body;
   if (s === "home") body = renderHome();
   else if (!sec.built) body = renderSoon(sec);
@@ -386,6 +402,7 @@ function renderSheet() {
     h("h3", { text: "Appearance" }),
     h("div", { class: "seg" }, seg("Auto", state.theme === "auto", () => setTheme("auto"), "auto"), seg("Light", state.theme === "light", () => setTheme("light"), "sun"), seg("Dark", state.theme === "dark", () => setTheme("dark"), "moon")),
     h("h3", { text: "This page" }),
+    h("button", { class: "rowbtn", type: "button", onclick: () => { state.sheet = null; targets.open(); } }, icon("goals", 22), "Who you target"),
     h("button", { class: "rowbtn", type: "button", onclick: async () => { state.sheet = null; render(); await reload(true); render(); } }, icon("refresh", 22), "Refresh now"),
     h("button", { class: "rowbtn", type: "button", onclick: async () => { await signOut(); showSignIn(); } }, icon("logout", 22), "Sign out"),
   ];
@@ -423,6 +440,8 @@ async function reload(keepMessage = false) {
   const d = await loadCompany(state.orgId);
   if (my !== state.loadId) return;
   if (!d.ok) { if (isSignedIn()) state.loadError = "Could not load everything. Check your connection and press Refresh in Settings."; return; }
+  d.targets = await loadTargets(state.orgId);
+  if (my !== state.loadId) return;
   state.loadError = null;
   state.data = d;
   if (!keepMessage) state.runMessage = null;
@@ -430,7 +449,7 @@ async function reload(keepMessage = false) {
 async function refreshNow() { await reload(true); render(); }
 
 // ---- sign in / out ------------------------------------------------------------------------------------------------------------------------
-function showSignIn() { $("app").hidden = true; $("sheet-root").replaceChildren(); $("signin").hidden = false; Object.assign(state, { data: null, companies: [], orgId: null, sheet: null, loadError: null, runMessage: null, itemId: null, section: "home", addGoal: null }); $("password").value = ""; }
+function showSignIn() { $("app").hidden = true; $("sheet-root").replaceChildren(); $("signin").hidden = false; Object.assign(state, { data: null, companies: [], orgId: null, sheet: null, loadError: null, runMessage: null, itemId: null, section: "home", addGoal: null, targets: null }); $("password").value = ""; }
 async function showApp() { $("signin").hidden = true; $("app").hidden = false; render(); await reload(); render(); }
 
 $("signin-form").addEventListener("submit", async (e) => {

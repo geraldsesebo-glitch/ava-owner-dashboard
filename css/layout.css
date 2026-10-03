@@ -206,3 +206,13 @@ ul.plain { margin: 6px 0 0; padding-left: 1.2rem; } ul.plain li { margin: 4px 0;
 .strong { font-weight: 700; }
 .item.addrow { color: var(--accent); font-weight: 700; }
 .card .notice p { margin: 4px 0; }
+
+/* Who you target */
+.checks { max-height: 20rem; overflow-y: auto; border: 1px solid var(--line); border-radius: 14px; padding: 6px; margin-top: 8px; background: var(--bg); }
+.check { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 4px 10px; border-radius: 10px; cursor: pointer; }
+.check:hover { background: var(--hover); }
+.check input { width: 22px; height: 22px; accent-color: var(--accent); flex: 0 0 auto; margin: 0; }
+.check.d1 { padding-left: 34px; } .check.d2 { padding-left: 58px; }
+.searchbox.inline { margin-top: 8px; }
+.mainnote { color: var(--muted); margin: -6px 0 14px; }
+ul.plain.small { font-size: .88rem; color: var(--muted); }
