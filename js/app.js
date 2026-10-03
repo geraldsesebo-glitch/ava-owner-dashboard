@@ -6,6 +6,7 @@ import { signIn, signOut, isSignedIn, onSignedOut, rpc, callHelper } from "./api
 import { loadCompanies, loadCompany } from "./data.js";
 import { companyKind, plainReason, runSentence, dispositionLabel, candidateReason, fitSentence, capabilityLabel, goalStatusLabel, goalCriteriaLine, eventSentence, timeAgo, homeStatus } from "./text.js";
 import { icon } from "./icons.js";
+import { createAddGoal } from "./addgoal.js";
 
 const $ = (id) => document.getElementById(id);
 const STALE_RUN_MS = 10 * 60 * 1000;
@@ -21,6 +22,7 @@ const SECTIONS = [
   { id: "inbox", label: "Inbox", icon: "inbox", built: false },
   { id: "pipeline", label: "Pipeline", icon: "pipeline", built: false },
   { id: "history", label: "History", icon: "history", built: true },
+  { id: "addgoal", label: "Add goal", icon: "plus", built: true, hidden: true },
 ];
 const SOON = {
   outreach: "Ava will write first messages to the companies she found, and wait for your OK before anything is sent.",
@@ -29,7 +31,9 @@ const SOON = {
 };
 const TABS = ["home", "goals", "companies", "history", "more"];
 
-const state = { companies: [], orgId: null, data: null, section: "home", itemId: null, filter: "found", historyAll: false, query: "", busy: false, runMessage: null, sheet: null, theme: loadTheme(), loadId: 0, loadError: null };
+const state = { companies: [], orgId: null, data: null, section: "home", itemId: null, filter: "found", historyAll: false, query: "", busy: false, runMessage: null, sheet: null, theme: loadTheme(), loadId: 0, loadError: null, addGoal: null };
+// the Add goal screen (uses only the existing goal reader and its confirm step)
+const addGoal = createAddGoal({ h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), call: callHelper });
 
 // ---- small helpers ------------------------------------------------------------------------------------------------------------------------
 function h(tag, props, ...kids) {
@@ -69,7 +73,7 @@ function facts() {
   for (const c of d.candidates) if (c.disposition === "discovered") foundByRun.set(c.run_id, (foundByRun.get(c.run_id) || 0) + 1);
   const runsByGoal = new Map();
   for (const r of d.runs) { if (!runsByGoal.has(r.owner_objective_id)) runsByGoal.set(r.owner_objective_id, []); runsByGoal.get(r.owner_objective_id).push(r); }
-  const goals = d.goals.map((g) => {
+  const goals = d.goals.filter((g) => g.status !== "cancelled").map((g) => {   // a cancelled goal is withdrawn: it leaves the list (the History keeps the line)
     const runs = runsByGoal.get(g.id) || [];
     return { ...g, runs, latestRun: runs[0] || null, found: runs.reduce((n, r) => n + (foundByRun.get(r.id) || 0), 0) };
   });
@@ -116,17 +120,17 @@ function currentItem() {
 }
 
 // ---- navigation ---------------------------------------------------------------------------------------------------------------------------
-function go(section, itemId = null) { state.section = section; state.itemId = itemId; state.query = ""; state.sheet = null; render(); $("main").scrollTop = 0; $("list").scrollTop = 0; }
+function go(section, itemId = null) { if (section !== "addgoal") state.addGoal = null; state.section = section; state.itemId = itemId; state.query = ""; state.sheet = null; render(); $("main").scrollTop = 0; $("list").scrollTop = 0; }
 function pane() {
   const sec = SECTIONS.find((s) => s.id === state.section);
-  if (state.section === "home" || !sec.built) return "main";
+  if (state.section === "home" || state.section === "addgoal" || !sec.built) return "main";
   return state.itemId ? "main" : "list";
 }
 
 // ---- pieces -------------------------------------------------------------------------------------------------------------------------------
 function renderStrip() {
   fill($("strip"), h("div", { class: "brand", "aria-hidden": "true", text: "A" }),
-    SECTIONS.map((s) => h("button", { class: "strip-btn", type: "button", title: s.built ? s.label : `${s.label} – coming soon`, "aria-current": state.section === s.id ? "page" : null, onclick: () => go(s.id) },
+    SECTIONS.filter((s) => !s.hidden).map((s) => h("button", { class: "strip-btn", type: "button", title: s.built ? s.label : `${s.label} – coming soon`, "aria-current": state.section === s.id || (s.id === "goals" && state.section === "addgoal") ? "page" : null, onclick: () => go(s.id) },
       icon(s.icon, 24), h("span", { text: s.label }), s.built ? null : h("span", { class: "dotsoon", title: "Coming soon" }))),
     h("div", { class: "strip-foot" }, h("button", { class: "strip-btn", type: "button", title: "Settings", onclick: () => { state.sheet = { kind: "settings" }; render(); } }, icon("gear", 24), h("span", { text: "Settings" }))));
 }
@@ -159,7 +163,7 @@ function listHead(title, { search = false, chips = null } = {}) {
 const soonBadge = () => h("span", { class: "badge soon", text: "Coming soon" });
 
 function renderList() {
-  const s = state.section, sec = SECTIONS.find((x) => x.id === s);
+  const s = state.section === "addgoal" ? "goals" : state.section, sec = SECTIONS.find((x) => x.id === s);
   if (!state.data) { fill($("list"), listHead(sec.label), h("div", { class: "list-body" }, h("p", { class: "empty", text: "Loading…" }))); return; }
   if (s === "home") {
     const f = facts(), ev = headlineEvents().slice(0, 6);
@@ -199,7 +203,7 @@ function renderList() {
     return h("button", { class: "item", type: "button", "aria-current": on, onclick: () => go(s, i.id) }, h("span", { class: "t", text: i.s.text }), h("span", { class: "s", text: timeAgo(i.ev.created_at) }));
   });
   fill($("list"), listHead(head, { search: s !== "goals" || items.length > 6, chips }), h("div", { class: "list-body" },
-    s === "goals" ? h("button", { class: "item soon", type: "button", onclick: () => openSoon("Add goal") }, h("span", { class: "row" }, h("span", { class: "t", text: "+ Add goal" }), soonBadge())) : null, rows));
+    s === "goals" ? h("button", { class: "item addrow", type: "button", onclick: () => addGoal.open() }, h("span", { class: "row" }, h("span", { class: "t", text: "+ Add goal" }))) : null, rows));
 }
 
 // ---- actions ------------------------------------------------------------------------------------------------------------------------------
@@ -281,13 +285,13 @@ function renderHome() {
     pick ? h("div", { class: "card" }, h("label", { class: "small muted", for: "goal-pick", text: "Search for which goal?" }), h("select", { id: "goal-pick", class: "pick" }, f.confirmed.map((g) => h("option", { value: g.id, text: clip(g.source_goal_text, 70) })))) : null,
     h("div", { class: "card" }, h("div", { class: "tiles" },
       tile("Run search", "run", () => runSearch(target()), { disabled: !!block || state.busy }),
-      tile("Add goal", "plus", () => openSoon("Add goal"), { soon: true }),
+      tile("Add goal", "plus", () => addGoal.open(), { disabled: state.busy }),
       tile("Approve", "check", () => openSoon("Approve"), { soon: true }),
       tile(stopped ? "Resume" : "Emergency stop", stopped ? "run" : "stop", stopped ? () => { state.sheet = { kind: "resume" }; render(); } : () => setStop(true), { danger: !stopped, disabled: state.busy })),
       block ? h("p", { class: "muted small", text: block }) : null),
     messageBox(state.runMessage),
     h("div", { class: "row2" }, h("h3", { text: "Your goals" }), f.goals.length > 3 ? h("button", { class: "textbtn", type: "button", onclick: () => go("goals") }, `See all ${f.goals.length} ›`) : null),
-    f.goals.length === 0 ? h("div", { class: "card empty", text: "No goals yet. Adding goals from this page comes later." }) : f.goals.slice(0, 3).map(goalCard),
+    f.goals.length === 0 ? h("div", { class: "card empty" }, h("p", { text: "No goals yet." }), h("button", { class: "btn primary", type: "button", onclick: () => addGoal.open() }, "Add your first goal")) : f.goals.slice(0, 3).map(goalCard),
     h("h3", { text: "New companies" }),
     h("div", { class: "card" }, newCos.length === 0 ? h("p", { class: "muted", text: "None found yet." }) : h("div", { class: "cardlist" }, newCos.map((c) => h("button", { class: "li linkrow", type: "button", onclick: () => { state.filter = "found"; go("companies", c.id); } },
       h("div", { class: "row2" }, h("strong", { text: clip(candOf(c).name, 70) || "(no name)" }), h("span", { class: "badge good", text: "New" })),
@@ -311,7 +315,8 @@ function renderGoalDetail(g) {
       h("dl", { class: "kv" }, goalCriteriaLine(g.criteria) ? [h("dt", { text: "Looking for" }), h("dd", { text: goalCriteriaLine(g.criteria) })] : null, h("dt", { text: "Branch" }), h("dd", { text: "Main" }), f.employee ? [h("dt", { text: "Ava" }), h("dd", { text: f.employee.name })] : null),
       messageBox(state.runMessage),
       g.status === "confirmed" ? h("button", { class: "btn primary block bigbtn", type: "button", disabled: !!block || state.busy, onclick: () => runSearch(g.id) }, icon("run", 20), state.busy ? "Searching…" : "Run a search for this goal") : null,
-      g.status === "confirmed" && block ? h("p", { class: "muted small", text: block }) : null),
+      g.status === "confirmed" && block ? h("p", { class: "muted small", text: block }) : null,
+      g.status === "awaiting_confirmation" ? h("button", { class: "btn primary block bigbtn", type: "button", onclick: () => addGoal.review(g.id) }, icon("check", 20), "Review and confirm") : null),
     g.runs.length ? h("div", { class: "card" }, h("h3", { text: `${g.runs.length} ${word(g.runs.length, "search", "searches")} so far` }),
       h("div", { class: "cardlist" }, g.runs.slice(0, 10).map((r) => { const s = runSentence(r, g.quantity, state.data.candidates.filter((c) => c.run_id === r.id && c.disposition === "discovered").length); return h("div", { class: "li" }, h("div", { text: s.text }), h("div", { class: "when", text: timeAgo(r.created_at) })); }))) : null,
   ];
@@ -352,12 +357,13 @@ function renderMain() {
   const s = state.section, sec = SECTIONS.find((x) => x.id === s);
   const err = state.loadError ? h("div", { class: "notice bad loaderr", role: "alert", text: state.loadError }) : null;
   if (!state.data) { fill($("main"), err, h("p", { class: "empty", text: state.loadError ? "" : "Loading…" })); return; }
+  if (s === "addgoal") { fill($("main"), err, addGoal.render()); return; }
   let body;
   if (s === "home") body = renderHome();
   else if (!sec.built) body = renderSoon(sec);
   else {
     const it = currentItem();
-    body = it ? (s === "goals" ? renderGoalDetail(it) : s === "companies" ? renderCompanyDetail(it) : renderHistoryDetail(it)) : [h("p", { class: "empty", text: s === "goals" ? "No goals yet. Adding goals from this page comes later." : "Pick something from the list." })];
+    body = it ? (s === "goals" ? renderGoalDetail(it) : s === "companies" ? renderCompanyDetail(it) : renderHistoryDetail(it)) : [s === "goals" ? h("div", { class: "empty" }, h("p", { text: "No goals yet." }), h("button", { class: "btn primary", type: "button", onclick: () => addGoal.open() }, "Add your first goal")) : h("p", { class: "empty", text: "Pick something from the list." })];
   }
   fill($("main"), err, s === "home" ? null : h("button", { class: "back", type: "button", onclick: () => { state.itemId = null; render(); } }, icon("back", 18), sec.label), s === "home" ? h("h1", { class: "page-title", text: org()?.name ?? "Home" }) : null, body);
 }
@@ -367,7 +373,7 @@ function renderTabbar() {
   fill($("tabbar"), TABS.map((id) => {
     if (id === "more") return h("button", { class: "tab", type: "button", "aria-current": moreOn ? "page" : null, onclick: () => { state.sheet = { kind: "more" }; render(); } }, icon("more", 24), "More");
     const s = SECTIONS.find((x) => x.id === id);
-    return h("button", { class: "tab", type: "button", "aria-current": state.section === id ? "page" : null, onclick: () => go(id) }, icon(s.icon, 24), s.label);
+    return h("button", { class: "tab", type: "button", "aria-current": state.section === id || (id === "goals" && state.section === "addgoal") ? "page" : null, onclick: () => go(id) }, icon(s.icon, 24), s.label);
   }));
 }
 
@@ -424,7 +430,7 @@ async function reload(keepMessage = false) {
 async function refreshNow() { await reload(true); render(); }
 
 // ---- sign in / out ------------------------------------------------------------------------------------------------------------------------
-function showSignIn() { $("app").hidden = true; $("sheet-root").replaceChildren(); $("signin").hidden = false; Object.assign(state, { data: null, companies: [], orgId: null, sheet: null, loadError: null, runMessage: null, itemId: null, section: "home" }); $("password").value = ""; }
+function showSignIn() { $("app").hidden = true; $("sheet-root").replaceChildren(); $("signin").hidden = false; Object.assign(state, { data: null, companies: [], orgId: null, sheet: null, loadError: null, runMessage: null, itemId: null, section: "home", addGoal: null }); $("password").value = ""; }
 async function showApp() { $("signin").hidden = true; $("app").hidden = false; render(); await reload(); render(); }
 
 $("signin-form").addEventListener("submit", async (e) => {
