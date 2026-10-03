@@ -114,6 +114,19 @@ const SET_ASIDE = {
   possible_duplicate_flagged: "New, but it may be a duplicate of one Ava knows. Worth a look.",
 };
 
+/** A found company that came without a website: still a valid company (it is told apart by the source's own id), but worth saying so. Only for real entries with a name. */
+export function noWebsite(candidate) {
+  const c = candidate && typeof candidate === "object" ? candidate : {};
+  return typeof c.name === "string" && c.name.trim() !== "" && !(typeof c.domain === "string" && c.domain.trim() !== "");
+}
+
+/** What a search cost in credits, for sources that charge one credit per company returned. Empty for every other source (no invented cost). */
+export function creditsNote(run) {
+  const n = run?.provider_records_inspected;
+  if (run?.provider_key !== "pdl-company-search" || !Number.isInteger(n) || n < 0) return "";
+  return n === 0 ? "No credits used." : `About ${n} ${n === 1 ? "credit" : "credits"} used (1 credit per company the data service returned).`;
+}
+
 export function dispositionLabel(disposition) {
   switch (disposition) {
     case "discovered": return "New";

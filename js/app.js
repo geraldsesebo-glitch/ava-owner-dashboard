@@ -4,7 +4,7 @@
 import { HELPERS } from "./config.js";
 import { signIn, signOut, isSignedIn, onSignedOut, rpc, callHelper } from "./api.js";
 import { loadCompanies, loadCompany, loadTargets } from "./data.js";
-import { companyKind, plainReason, runSentence, dispositionLabel, candidateReason, fitSentence, capabilityLabel, goalStatusLabel, goalCriteriaLine, eventSentence, makeResolver, timeAgo, homeStatus } from "./text.js";
+import { companyKind, plainReason, runSentence, dispositionLabel, candidateReason, fitSentence, capabilityLabel, goalStatusLabel, goalCriteriaLine, eventSentence, makeResolver, noWebsite, creditsNote, timeAgo, homeStatus } from "./text.js";
 import { icon } from "./icons.js";
 import { createAddGoal } from "./addgoal.js";
 import { createTargets } from "./targets.js";
@@ -215,7 +215,7 @@ function renderList() {
       h("span", { class: "s", text: `${i.found} of ${i.quantity} found` }));
     if (s === "companies") { const c = candOf(i); return h("button", { class: "item", type: "button", "aria-current": on, onclick: () => go(s, i.id) },
       h("span", { class: "row" }, h("span", { class: "t", text: clip(c.name, 70) || "(no name)" }), h("span", { class: `badge ${i.disposition === "discovered" ? "good" : i.disposition === "already_known" ? "wait" : "warn"}`, text: dispositionLabel(i.disposition) })),
-      h("span", { class: "s", text: [c.geography_label, c.industry_label].filter((x) => typeof x === "string" && x).join(" · ") || candidateReason(i) })); }
+      h("span", { class: "s", text: [c.geography_label, c.industry_label, noWebsite(c) ? "no website" : null].filter((x) => typeof x === "string" && x).join(" · ") || candidateReason(i) })); }
     return h("button", { class: "item", type: "button", "aria-current": on, onclick: () => go(s, i.id) }, h("span", { class: "t", text: i.s.text }), h("span", { class: "s", text: timeAgo(i.ev.created_at) }));
   });
   fill($("list"), listHead(head, { search: s !== "goals" || items.length > 6, chips }), h("div", { class: "list-body" },
@@ -345,7 +345,7 @@ function renderGoalDetail(g) {
       g.status === "confirmed" && block ? h("p", { class: "muted small", text: block }) : null,
       g.status === "awaiting_confirmation" ? h("button", { class: "btn primary block bigbtn", type: "button", onclick: () => addGoal.review(g.id) }, icon("check", 20), "Review and confirm") : null),
     g.runs.length ? h("div", { class: "card" }, h("h3", { text: `${g.runs.length} ${word(g.runs.length, "search", "searches")} so far` }),
-      h("div", { class: "cardlist" }, g.runs.slice(0, 10).map((r) => { const s = runSentence(r, g.quantity, state.data.candidates.filter((c) => c.run_id === r.id && c.disposition === "discovered").length); return h("div", { class: "li" }, h("div", { text: s.text }), h("div", { class: "when", text: timeAgo(r.created_at) })); }))) : null,
+      h("div", { class: "cardlist" }, g.runs.slice(0, 10).map((r) => { const s = runSentence(r, g.quantity, state.data.candidates.filter((c) => c.run_id === r.id && c.disposition === "discovered").length); return h("div", { class: "li" }, h("div", { text: s.text }), creditsNote(r) ? h("div", { class: "muted small", text: creditsNote(r) }) : null, h("div", { class: "when", text: timeAgo(r.created_at) })); }))) : null,
   ];
 }
 function renderCompanyDetail(c) {
@@ -359,7 +359,7 @@ function renderCompanyDetail(c) {
         cand.geography_label ? [h("dt", { text: "Place" }), h("dd", { text: cand.geography_label })] : null,
         cand.industry_label ? [h("dt", { text: "Kind of company" }), h("dd", { text: cand.industry_label })] : null,
         Number.isInteger(cand.employee_count) ? [h("dt", { text: "Size" }), h("dd", { text: `${cand.employee_count} employees` })] : null,
-        typeof cand.domain === "string" && cand.domain ? [h("dt", { text: "Website" }), h("dd", { text: clip(cand.domain, 80) })] : null,
+        typeof cand.domain === "string" && cand.domain ? [h("dt", { text: "Website" }), h("dd", { text: clip(cand.domain, 80) })] : noWebsite(cand) ? [h("dt", { text: "Website" }), h("dd", {}, h("span", { class: "badge warn", text: "No website" }), " The data service has no website for this company, so Ava tells it apart by the service's own record instead.")] : null,
         f.employee ? [h("dt", { text: "Found by" }), h("dd", { text: f.employee.name })] : null,
         goal ? [h("dt", { text: "For the goal" }), h("dd", { text: clip(goal.source_goal_text, 120) })] : null,
         h("dt", { text: "Found" }), h("dd", { text: timeAgo(c.created_at) }), h("dt", { text: "Branch" }), h("dd", { text: "Main" }))),

@@ -15,7 +15,7 @@ export async function loadCompany(orgId) {
     select(`ai_employees?${o}&select=id,name,role_key,status&order=created_at.asc`),
     select(`ai_employee_authorities?${o}&select=ai_employee_id,capability_key,enabled,requires_approval,limits,context`),
     select(`owner_objectives?${o}&select=id,source_goal_text,quantity,status,criteria,created_at,confirmed_at&order=created_at.desc&limit=50`),
-    select(`discovery_runs?${o}&select=id,owner_objective_id,status,requested,discovered,already_known,duplicate_in_run,rejected_outside,insufficient_evidence,malformed,provider_key,termination_reason,created_at,updated_at,finished_at&order=created_at.desc&limit=50`),
+    select(`discovery_runs?${o}&select=id,owner_objective_id,status,requested,discovered,provider_records_inspected,already_known,duplicate_in_run,rejected_outside,insufficient_evidence,malformed,provider_key,termination_reason,created_at,updated_at,finished_at&order=created_at.desc&limit=50`),
     select(`discovery_candidates?${o}&select=id,run_id,disposition,reason,identity_tier,candidate,criteria_match,created_at&order=created_at.desc&limit=400`),
     select(`work_items?${o}&select=id,status,updated_at,context&order=updated_at.desc&limit=100`),
     select(`audit_log?${o}&select=id,event_type,decision,capability_key,execution_id,created_at,detail&order=created_at.desc&limit=200`),
