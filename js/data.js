@@ -17,14 +17,16 @@ export async function loadCompany(orgId) {
     select(`owner_objectives?${o}&select=id,source_goal_text,quantity,status,criteria,created_at,confirmed_at&order=created_at.desc&limit=50`),
     select(`discovery_runs?${o}&select=id,owner_objective_id,status,requested,discovered,already_known,duplicate_in_run,rejected_outside,insufficient_evidence,malformed,provider_key,termination_reason,created_at,updated_at,finished_at&order=created_at.desc&limit=50`),
     select(`discovery_candidates?${o}&select=id,run_id,disposition,reason,identity_tier,candidate,criteria_match,created_at&order=created_at.desc&limit=400`),
-    select(`work_items?${o}&select=id,status,updated_at&order=updated_at.desc&limit=30`),
-    select(`audit_log?${o}&select=id,event_type,decision,capability_key,created_at,detail&order=created_at.desc&limit=200`),
+    select(`work_items?${o}&select=id,status,updated_at,context&order=updated_at.desc&limit=100`),
+    select(`audit_log?${o}&select=id,event_type,decision,capability_key,execution_id,created_at,detail&order=created_at.desc&limit=200`),
   ]);
+  // which job each logged run belonged to: only used to put a company name in a history line, so a failed read just makes those lines plainer
+  const execs = await select(`executions?${o}&select=id,work_item_id&order=created_at.desc&limit=300`);
   const all = [emps, auths, goals, runs, cands, jobs, audit];
   if (all.some((r) => !r.ok || !Array.isArray(r.data))) return { ok: false, status: all.find((r) => !r.ok)?.status };
   return {
     ok: true,
-    employees: emps.data, authorities: auths.data, goals: goals.data, runs: runs.data, candidates: cands.data, jobs: jobs.data, audit: audit.data,
+    employees: emps.data, authorities: auths.data, goals: goals.data, runs: runs.data, candidates: cands.data, jobs: jobs.data, audit: audit.data, executions: execs.ok && Array.isArray(execs.data) ? execs.data : [],
     loadedAt: Date.now(),
   };
 }

@@ -4,11 +4,12 @@
 import { HELPERS } from "./config.js";
 import { signIn, signOut, isSignedIn, onSignedOut, rpc, callHelper } from "./api.js";
 import { loadCompanies, loadCompany, loadTargets } from "./data.js";
-import { companyKind, plainReason, runSentence, dispositionLabel, candidateReason, fitSentence, capabilityLabel, goalStatusLabel, goalCriteriaLine, eventSentence, timeAgo, homeStatus } from "./text.js";
+import { companyKind, plainReason, runSentence, dispositionLabel, candidateReason, fitSentence, capabilityLabel, goalStatusLabel, goalCriteriaLine, eventSentence, makeResolver, timeAgo, homeStatus } from "./text.js";
 import { icon } from "./icons.js";
 import { createAddGoal } from "./addgoal.js";
 import { createTargets } from "./targets.js";
 import { createPermissions } from "./permissions.js";
+import { createProviderTest } from "./providertest.js";
 
 const $ = (id) => document.getElementById(id);
 const STALE_RUN_MS = 10 * 60 * 1000;
@@ -27,6 +28,7 @@ const SECTIONS = [
   { id: "addgoal", label: "Add goal", icon: "plus", built: true, hidden: true },
   { id: "targets", label: "Who you target", icon: "goals", built: true, hidden: true },
   { id: "permissions", label: "What Ava may do", icon: "goals", built: true, hidden: true },
+  { id: "providertest", label: "Provider test", icon: "goals", built: true, hidden: true },
 ];
 const SOON = {
   outreach: "Ava will write first messages to the companies she found, and wait for your OK before anything is sent.",
@@ -35,13 +37,15 @@ const SOON = {
 };
 const TABS = ["home", "goals", "companies", "history", "more"];
 
-const state = { companies: [], orgId: null, data: null, section: "home", itemId: null, filter: "found", historyAll: false, query: "", busy: false, runMessage: null, sheet: null, theme: loadTheme(), loadId: 0, loadError: null, addGoal: null, targets: null, perm: null };
+const state = { companies: [], orgId: null, data: null, section: "home", itemId: null, filter: "found", historyAll: false, query: "", busy: false, runMessage: null, sheet: null, theme: loadTheme(), loadId: 0, loadError: null, addGoal: null, targets: null, perm: null, pt: null };
 // the Add goal screen (uses only the existing goal reader and its confirm step)
 const addGoal = createAddGoal({ h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), call: callHelper, openTargets: () => targets.open() });
 // the "Who you target" screen (uses only the existing owner-only set_knowledge path)
 const targets = createTargets({ h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), rpc });
 // the "What Ava may do" screen (uses only the existing owner-only set_ai_authority path)
 const permissions = createPermissions({ h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), rpc });
+// the "Provider test" screen (one owner-only test function with a fixed, capped test; nothing is saved)
+const providerTest = createProviderTest({ h, icon, state, render: () => render(), go: (s, i) => go(s, i), call: callHelper });
 
 // ---- small helpers ------------------------------------------------------------------------------------------------------------------------
 function h(tag, props, ...kids) {
@@ -106,7 +110,9 @@ function runBlock(f) {
   if (!f.canSearch) return "Ava has not been allowed to search for new companies yet. You can allow it under \u201cWhat Ava may do\u201d (Settings).";
   return null;
 }
-const headlineEvents = () => state.data.audit.map((ev) => ({ ev, s: eventSentence(ev) })).filter((x) => x.s.headline);
+// each line can name its company or goal, using only what is already loaded (see makeResolver)
+const describe = (ev) => { const d = state.data; if (d && d.resolver === undefined) d.resolver = makeResolver({ jobs: d.jobs, executions: d.executions, goals: d.goals, runs: d.runs }); return eventSentence(ev, d?.resolver); };
+const headlineEvents = () => state.data.audit.map((ev) => ({ ev, s: describe(ev) })).filter((x) => x.s.headline);
 function companyGroups() {
   const d = state.data, latest = d.runs[0]?.id;
   return {
@@ -121,7 +127,7 @@ function itemsFor(section) {
   if (!state.data) return [];
   if (section === "goals") return facts().goals.filter((g) => matches(g.source_goal_text));
   if (section === "companies") return companyGroups()[state.filter].filter((c) => matches(`${candOf(c).name ?? ""} ${candOf(c).geography_label ?? ""} ${candOf(c).industry_label ?? ""}`));
-  if (section === "history") return state.data.audit.map((ev) => ({ id: ev.id, ev, s: eventSentence(ev) })).filter((x) => (state.historyAll || x.s.headline) && matches(x.s.text));
+  if (section === "history") return state.data.audit.map((ev) => ({ id: ev.id, ev, s: describe(ev) })).filter((x) => (state.historyAll || x.s.headline) && matches(x.s.text));
   return [];
 }
 function currentItem() {
@@ -130,10 +136,10 @@ function currentItem() {
 }
 
 // ---- navigation ---------------------------------------------------------------------------------------------------------------------------
-function go(section, itemId = null) { if (section !== "addgoal") state.addGoal = null; if (section !== "targets") state.targets = null; if (section !== "permissions") state.perm = null; state.section = section; state.itemId = itemId; state.query = ""; state.sheet = null; render(); $("main").scrollTop = 0; $("list").scrollTop = 0; }
+function go(section, itemId = null) { if (section !== "addgoal") state.addGoal = null; if (section !== "targets") state.targets = null; if (section !== "permissions") state.perm = null; if (section !== "providertest") state.pt = null; state.section = section; state.itemId = itemId; state.query = ""; state.sheet = null; render(); $("main").scrollTop = 0; $("list").scrollTop = 0; }
 function pane() {
   const sec = SECTIONS.find((s) => s.id === state.section);
-  if (state.section === "home" || state.section === "addgoal" || state.section === "targets" || state.section === "permissions" || !sec.built) return "main";
+  if (state.section === "home" || state.section === "addgoal" || state.section === "targets" || state.section === "permissions" || state.section === "providertest" || !sec.built) return "main";
   return state.itemId ? "main" : "list";
 }
 
@@ -173,7 +179,7 @@ function listHead(title, { search = false, chips = null } = {}) {
 const soonBadge = () => h("span", { class: "badge soon", text: "Coming soon" });
 
 function renderList() {
-  const s = ["addgoal", "targets", "permissions"].includes(state.section) ? "goals" : state.section, sec = SECTIONS.find((x) => x.id === s);
+  const s = ["addgoal", "targets", "permissions", "providertest"].includes(state.section) ? "goals" : state.section, sec = SECTIONS.find((x) => x.id === s);
   if (!state.data) { fill($("list"), listHead(sec.label), h("div", { class: "list-body" }, h("p", { class: "empty", text: "Loading…" }))); return; }
   if (s === "home") {
     const f = facts(), ev = headlineEvents().slice(0, 6);
@@ -381,6 +387,7 @@ function renderMain() {
   if (s === "addgoal") { fill($("main"), err, addGoal.render()); return; }
   if (s === "targets") { fill($("main"), err, targets.render()); return; }
   if (s === "permissions") { fill($("main"), err, permissions.render()); return; }
+  if (s === "providertest") { fill($("main"), err, providerTest.render()); return; }
   let body;
   if (s === "home") body = renderHome();
   else if (!sec.built) body = renderSoon(sec);
@@ -411,6 +418,7 @@ function renderSheet() {
     h("h3", { text: "This page" }),
     h("button", { class: "rowbtn", type: "button", onclick: () => { state.sheet = null; permissions.open(); } }, icon("check", 22), "What Ava may do"),
     h("button", { class: "rowbtn", type: "button", onclick: () => { state.sheet = null; targets.open(); } }, icon("goals", 22), "Who you target"),
+    h("button", { class: "rowbtn", type: "button", onclick: () => { state.sheet = null; providerTest.open(); } }, icon("refresh", 22), "Provider test"),
     h("button", { class: "rowbtn", type: "button", onclick: async () => { state.sheet = null; render(); await reload(true); render(); } }, icon("refresh", 22), "Refresh now"),
     h("button", { class: "rowbtn", type: "button", onclick: async () => { await signOut(); showSignIn(); } }, icon("logout", 22), "Sign out"),
   ];
@@ -457,7 +465,7 @@ async function reload(keepMessage = false) {
 async function refreshNow() { await reload(true); render(); }
 
 // ---- sign in / out ------------------------------------------------------------------------------------------------------------------------
-function showSignIn() { $("app").hidden = true; $("sheet-root").replaceChildren(); $("signin").hidden = false; Object.assign(state, { data: null, companies: [], orgId: null, sheet: null, loadError: null, runMessage: null, itemId: null, section: "home", addGoal: null, targets: null, perm: null }); $("password").value = ""; }
+function showSignIn() { $("app").hidden = true; $("sheet-root").replaceChildren(); $("signin").hidden = false; Object.assign(state, { data: null, companies: [], orgId: null, sheet: null, loadError: null, runMessage: null, itemId: null, section: "home", addGoal: null, targets: null, perm: null, pt: null }); $("password").value = ""; }
 async function showApp() { $("signin").hidden = true; $("app").hidden = false; render(); await reload(); render(); }
 
 $("signin-form").addEventListener("submit", async (e) => {

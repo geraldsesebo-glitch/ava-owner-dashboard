@@ -189,73 +189,168 @@ export function goalCriteriaLine(criteria) {
 
 // ---- history ------------------------------------------------------------------------------------------------------------------------------
 const WORK_TO = { completed: "finished", failed: "failed", active: "started", queued: "waiting to start", paused: "paused", needs_human: "waiting for you", cancelled: "cancelled" };
+const WORK_FROM = { completed: "finished", failed: "failed", active: "running", queued: "waiting to start", paused: "paused", needs_human: "waiting for you", cancelled: "cancelled" };
+const CLOSED_BECAUSE = { company_not_found: "the data service had no record of the company" };
+const SLOT_LABEL = { target_industries: "the kinds of company you target", target_geographies: "the places you target" };
+
+/** A name that came from the database: plain text only, no control characters, never long. Returns "" if there is nothing usable. */
+function tidy(v, max = 60) {
+  if (typeof v !== "string") return "";
+  const t = v.replace(/[\u0000-\u001f\u007f​-‏‪-‮]/g, " ").replace(/\s+/g, " ").trim();
+  return t.length > max ? t.slice(0, max - 1).trimEnd() + "…" : t;
+}
+const quoted = (s) => (s ? `“${s}”` : "");
+const isId = (v) => typeof v === "string" && v.length > 0 && v.length <= 64;
+
+/**
+ * Helps a history line say WHICH job or goal it is about. It only looks names up in what the page has already loaded; nothing new is fetched
+ * for a line, and anything it cannot find simply gets a plainer sentence ("a research job"). All lookups are by id, none by guessing.
+ *   jobs:       work items         { id, context: { company_name } }
+ *   executions: job runs           { id, work_item_id }
+ *   goals:      the company's goals { id, source_goal_text, quantity }
+ *   runs:       searches           { id, owner_objective_id }
+ */
+export function makeResolver({ jobs, executions, goals, runs } = {}) {
+  const arr = (x) => (Array.isArray(x) ? x : []);
+  const jobById = new Map(arr(jobs).filter((j) => j && isId(j.id)).map((j) => [j.id, j]));
+  const jobOfRun = new Map(arr(executions).filter((e) => e && isId(e.id) && isId(e.work_item_id)).map((e) => [e.id, e.work_item_id]));
+  const goalById = new Map(arr(goals).filter((g) => g && isId(g.id)).map((g) => [g.id, g]));
+  const goalOfSearch = new Map(arr(runs).filter((r) => r && isId(r.id) && isId(r.owner_objective_id)).map((r) => [r.id, r.owner_objective_id]));
+  const company = (workItemId) => {
+    const j = isId(workItemId) ? jobById.get(workItemId) : null;
+    const c = j && j.context && typeof j.context === "object" ? j.context : null;
+    return c ? tidy(c.company_name) : "";
+  };
+  return {
+    /** The company a job is about, or "". */
+    jobCompany: company,
+    /** The job a logged run belonged to -> its company, or "". */
+    runCompany: (executionId) => (isId(executionId) ? company(jobOfRun.get(executionId)) : ""),
+    jobReason: (workItemId) => {
+      const j = isId(workItemId) ? jobById.get(workItemId) : null;
+      const r = j && j.context && typeof j.context === "object" ? j.context.closed_reason : null;
+      return typeof r === "string" && CLOSED_BECAUSE[r] ? CLOSED_BECAUSE[r] : "";
+    },
+    /** A goal in the owner's own words, shortened, or "". */
+    goalText: (objectiveId) => { const g = isId(objectiveId) ? goalById.get(objectiveId) : null; return g ? tidy(g.source_goal_text, 70) : ""; },
+    goalOfSearch: (runId) => (isId(runId) ? goalOfSearch.get(runId) ?? null : null),
+  };
+}
+const NONE = makeResolver();
 
 /**
  * One audit-log row -> { headline: true/false, text }. headline=false rows are "behind the scenes" steps, hidden unless asked for.
- * Only a few whitelisted fields of `detail` are ever read; the raw detail is never shown.
+ * Only a few whitelisted fields of `detail` are ever read; the raw detail is never shown. `r` (optional) is a resolver from makeResolver;
+ * with it the sentence names the company or goal, without it the sentence is simply a little plainer.
  */
-export function eventSentence(ev) {
+export function eventSentence(ev, r = NONE) {
   const d = ev?.detail && typeof ev.detail === "object" ? ev.detail : {};
+  const forCompany = (name, fallback) => (name ? ` for ${quoted(name)}` : fallback ?? "");
+  const goalWords = (id) => { const g = r.goalText(id); return g ? ` ${quoted(g)}` : ""; };
+  const runCo = r.runCompany(ev?.execution_id) || r.jobCompany(d.work_item_id);
   switch (ev?.event_type) {
     case "ai_employee_provisioned":
       return ev.decision === "deny" ? { headline: true, text: "Someone tried to create an AI employee and was refused." }
-        : { headline: true, text: `${typeof d.name === "string" ? d.name : "An AI employee"} was created.` };
+        : { headline: true, text: `${typeof d.name === "string" && tidy(d.name, 40) ? tidy(d.name, 40) : "An AI employee"} was created.` };
     case "organization_status_changed":
       return { headline: true, text: d.to === "suspended" ? "Emergency stop was switched ON. Ava stopped working." : "Emergency stop was switched OFF. Ava can work again." };
     case "owner_objective_proposed":
     case "owner_objective_created":
-    case "objective_created":
-      return { headline: true, text: "A goal was added." };
-    case "owner_objective_confirmed":
-      return { headline: true, text: "A goal was confirmed." };
-    case "owner_objective_cancelled":
-      return { headline: true, text: "A goal was cancelled." };
-    case "discovery_run_started":
-      return { headline: true, text: "Ava started a search for companies." };
+    case "objective_created": {
+      const q = Number.isInteger(d.quantity) && d.quantity > 0 ? ` (${d.quantity} companies)` : "";
+      const g = goalWords(d.objective_id);
+      return { headline: true, text: g ? `A goal was added:${g}.` : `A goal was added${q}.` };
+    }
+    case "owner_objective_confirmed": {
+      const g = goalWords(d.objective_id);
+      return { headline: true, text: g ? `You confirmed the goal:${g}.` : "A goal was confirmed." };
+    }
+    case "owner_objective_cancelled": {
+      const g = goalWords(d.objective_id);
+      return { headline: true, text: g ? `You cancelled the goal:${g}.` : "A goal was cancelled." };
+    }
+    case "discovery_run_started": {
+      const g = goalWords(d.objective_id);
+      const n = Number.isInteger(d.requested) && d.requested > 0 ? ` Asked for ${d.requested} companies.` : "";
+      return { headline: true, text: g ? `Ava started a search for the goal${g}.${n}` : `Ava started a search for companies.${n}` };
+    }
     case "discovery_provider_selected":
-      return { headline: false, text: "A search source was chosen for the search." };
-    case "discovery_preflight":
+      return { headline: false, text: typeof d.provider === "string" && /mock/i.test(d.provider) ? "The practice (pretend) search source was chosen for the search." : "A search source was chosen for the search." };
+    case "discovery_preflight": {
+      const pg = Number.isInteger(d.page_no) && d.page_no > 0 ? ` for page ${d.page_no}` : "";
       return ev.decision === "deny" || d.ok === false
-        ? { headline: true, text: `A search step was stopped before it started. ${plainReason(d.reason).text}` }
-        : { headline: false, text: "A search step passed its last safety check." };
-    case "discovery_page_ingested":
-      return { headline: true, text: "Ava looked through a page of search results." };
+        ? { headline: true, text: `A search step${pg} was stopped before it started. ${plainReason(d.reason).text}` }
+        : { headline: false, text: `A search step${pg} passed its last safety check.` };
+    }
+    case "discovery_page_ingested": {
+      const parts = [];
+      const add = (n, w) => { if (Number.isInteger(n) && n > 0) parts.push(`${n} ${w}`); };
+      add(d.discovered, "new");
+      add(d.already_known, "already known");
+      add(d.duplicate_in_run, "repeated in this search");
+      add(d.rejected_outside, "outside what you target");
+      add(d.insufficient_evidence, "without enough information");
+      add(d.malformed, "unreadable");
+      const pg = Number.isInteger(d.page_no) && d.page_no > 0 ? `page ${d.page_no}` : "a page";
+      const seen = Number.isInteger(d.records) ? `${d.records} ${d.records === 1 ? "company" : "companies"} on ${pg}` : pg;
+      return { headline: true, text: `Ava looked through ${seen}${parts.length ? `: ${parts.join(", ")}` : ""}.` };
+    }
     case "discovery_page_failed":
       return { headline: true, text: `A search step failed. ${plainReason(d.reason).text}` };
     case "discovery_orphan_reclaimed":
       return { headline: true, text: "A search step got stuck and was cancelled so it could be tried again." };
     case "discovery_run_finished": {
       const s = typeof d.status === "string" ? d.status : "";
-      const r = plainReason(d.reason).text;
+      const rr = plainReason(d.reason).text;
       const n = Number.isInteger(d.discovered) ? d.discovered : null;
       const lead = s === "completed" ? "The search finished with everything asked for." : s === "partial" ? "The search finished." : s === "cancelled" ? "The search was cancelled." : "The search stopped.";
-      return { headline: true, text: `${lead}${n !== null ? ` New companies found: ${n}.` : ""} ${d.reason ? r : ""}`.trim() };
+      const g = goalWords(r.goalOfSearch(d.run_id));
+      return { headline: true, text: `${lead}${g ? ` Goal:${g}.` : ""}${n !== null ? ` New companies found: ${n}.` : ""} ${d.reason ? rr : ""}`.trim() };
     }
-    case "work_item_transition":
-      return { headline: true, text: `A job ${WORK_TO[d.to] ? "is now " + WORK_TO[d.to] : "changed"}.` };
-    case "execution_run_completed":
-      return { headline: true, text: "A research job finished." };
-    case "execution_run_failed":
-      return { headline: true, text: ev.decision === "retryable" ? "A research job did not work and can be tried again." : "A research job failed." };
+    case "work_item_transition": {
+      const co = r.jobCompany(d.work_item_id), now = WORK_TO[d.new_status], was = WORK_FROM[d.old_status];
+      const why = d.new_status === "failed" ? r.jobReason(d.work_item_id) : "";
+      const what = now ? (was && was !== now ? `changed from ${was} to ${now}` : `is now ${now}`) : "changed";
+      return { headline: true, text: `The research job${forCompany(co)} ${what}.${why ? ` Reason: ${why}.` : ""}` };
+    }
+    case "work_item_claimed":
+      return { headline: false, text: `Ava picked up the research job${forCompany(r.jobCompany(d.work_item_id))}.` };
+    case "execution_run_completed": {
+      const at = Number.isInteger(d.attempt_number) && d.attempt_number > 1 ? ` (attempt ${d.attempt_number})` : "";
+      return { headline: true, text: `The research job${forCompany(runCo)} finished${at}.` };
+    }
+    case "execution_run_failed": {
+      const at = Number.isInteger(d.attempt_number) && d.attempt_number > 1 ? ` (attempt ${d.attempt_number})` : "";
+      return { headline: true, text: `The research job${forCompany(runCo)} ${ev.decision === "retryable" ? "did not work and can be tried again" : "failed"}${at}.` };
+    }
+    case "execution_run_start_decision":
+      return { headline: false, text: `The research job${forCompany(runCo)} was allowed to start.` };
     case "intelligence_sufficiency_decision":
-      return { headline: false, text: "Ava checked what she already knew before looking something up." };
+      return { headline: false, text: `Ava checked what she already knew${forCompany(runCo)} before looking something up.` };
     case "evidence_recorded":
-      return { headline: false, text: "Ava saved a fact she found." };
+      return { headline: false, text: `Ava saved a fact she found${forCompany(runCo)}.` };
     case "entity_identifier_added":
-      return { headline: false, text: "Ava saved a way to recognise a company later." };
+      return { headline: false, text: `Ava saved a way to recognise a company later${d.identifier_type === "domain" ? " (its website address)" : ""}.` };
+    case "entity_profile_created": {
+      const n = tidy(d.canonical_name);
+      return { headline: false, text: n ? `Ava added ${quoted(n)} to the companies she knows.` : "Ava added a company to the companies she knows." };
+    }
     case "ai_authority_set":
-      return { headline: true, text: `Permission for Ava \u201c${capabilityLabel(ev.capability_key)}\u201d was switched ${d.enabled === true ? "on" : "off"}.` };
+      return { headline: true, text: `Permission for Ava “${capabilityLabel(ev.capability_key)}” was switched ${d.enabled === true ? "on" : "off"}.` };
+    case "knowledge_version_confirmed":
+    case "knowledge_version_created": {
+      const what = SLOT_LABEL[d.slot_key] ?? "a company setting";
+      const confirmed = ev.event_type === "knowledge_version_confirmed";
+      const v = Number.isInteger(d.version_no) && d.version_no > 0 ? ` (version ${d.version_no})` : "";
+      return { headline: confirmed, text: confirmed ? `You confirmed ${what}${v}.` : `A new draft of ${what} was saved${v}.` };
+    }
     case "lifecycle_stages_initialized":
       return { headline: false, text: "The company's pipeline steps were set up." };
     case "connector_authorization_decision":
     case "connector_authorization_consumed":
-      return { headline: false, text: "A look-up was approved and used." };
+      return { headline: false, text: `A look-up${forCompany(runCo)} was approved and used.` };
     case "authorization_decision":
-      return { headline: false, text: "A permission check was made." };
-    case "execution_run_start_decision":
-      return { headline: false, text: "A job was allowed to start." };
-    case "work_item_claimed":
-      return { headline: false, text: "Ava picked up a job." };
+      return { headline: false, text: `A permission check was made${forCompany(runCo)}.` };
     case "ai_employee_token_mint_requested":
       return { headline: false, text: ev.decision === "deny" ? "A request to start Ava working was refused." : "Ava was started on a task under your sign-in." };
     default:
