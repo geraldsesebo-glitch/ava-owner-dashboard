@@ -243,6 +243,8 @@ export function eventSentence(ev) {
       return { headline: false, text: "Ava saved a fact she found." };
     case "entity_identifier_added":
       return { headline: false, text: "Ava saved a way to recognise a company later." };
+    case "ai_authority_set":
+      return { headline: true, text: `Permission for Ava \u201c${capabilityLabel(ev.capability_key)}\u201d was switched ${d.enabled === true ? "on" : "off"}.` };
     case "lifecycle_stages_initialized":
       return { headline: false, text: "The company's pipeline steps were set up." };
     case "connector_authorization_decision":

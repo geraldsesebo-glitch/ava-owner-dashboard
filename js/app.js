@@ -8,6 +8,7 @@ import { companyKind, plainReason, runSentence, dispositionLabel, candidateReaso
 import { icon } from "./icons.js";
 import { createAddGoal } from "./addgoal.js";
 import { createTargets } from "./targets.js";
+import { createPermissions } from "./permissions.js";
 
 const $ = (id) => document.getElementById(id);
 const STALE_RUN_MS = 10 * 60 * 1000;
@@ -25,6 +26,7 @@ const SECTIONS = [
   { id: "history", label: "History", icon: "history", built: true },
   { id: "addgoal", label: "Add goal", icon: "plus", built: true, hidden: true },
   { id: "targets", label: "Who you target", icon: "goals", built: true, hidden: true },
+  { id: "permissions", label: "What Ava may do", icon: "goals", built: true, hidden: true },
 ];
 const SOON = {
   outreach: "Ava will write first messages to the companies she found, and wait for your OK before anything is sent.",
@@ -33,11 +35,13 @@ const SOON = {
 };
 const TABS = ["home", "goals", "companies", "history", "more"];
 
-const state = { companies: [], orgId: null, data: null, section: "home", itemId: null, filter: "found", historyAll: false, query: "", busy: false, runMessage: null, sheet: null, theme: loadTheme(), loadId: 0, loadError: null, addGoal: null, targets: null };
+const state = { companies: [], orgId: null, data: null, section: "home", itemId: null, filter: "found", historyAll: false, query: "", busy: false, runMessage: null, sheet: null, theme: loadTheme(), loadId: 0, loadError: null, addGoal: null, targets: null, perm: null };
 // the Add goal screen (uses only the existing goal reader and its confirm step)
 const addGoal = createAddGoal({ h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), call: callHelper, openTargets: () => targets.open() });
 // the "Who you target" screen (uses only the existing owner-only set_knowledge path)
 const targets = createTargets({ h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), rpc });
+// the "What Ava may do" screen (uses only the existing owner-only set_ai_authority path)
+const permissions = createPermissions({ h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), rpc });
 
 // ---- small helpers ------------------------------------------------------------------------------------------------------------------------
 function h(tag, props, ...kids) {
@@ -86,6 +90,7 @@ function facts() {
     employee, goals, latestRun, confirmed: goals.filter((g) => g.status === "confirmed"),
     runningStale: !!latestRun && latestRun.status === "running" && Date.now() - Date.parse(latestRun.updated_at) > STALE_RUN_MS,
     activeJobs: d.jobs.filter((j) => j.status === "active").length,
+    canSearch: !!employee && d.authorities.some((x) => x.ai_employee_id === employee.id && x.capability_key === "discover_prospects" && x.enabled === true && x.requires_approval !== true),
     foundTotal: [...foundByRun.values()].reduce((a, b) => a + b, 0),
   };
 }
@@ -98,6 +103,7 @@ function runBlock(f) {
   if (f.employee.status !== "active") return "The AI employee is switched off.";
   if (kind() === "pretend" ? !HELPERS.pretend : !HELPERS.real) return "Searching is not switched on for this company yet, so nothing can be searched. This will change later.";
   if (f.confirmed.length === 0) return "There is no confirmed goal to search for yet.";
+  if (!f.canSearch) return "Ava has not been allowed to search for new companies yet. You can allow it under \u201cWhat Ava may do\u201d (Settings).";
   return null;
 }
 const headlineEvents = () => state.data.audit.map((ev) => ({ ev, s: eventSentence(ev) })).filter((x) => x.s.headline);
@@ -124,10 +130,10 @@ function currentItem() {
 }
 
 // ---- navigation ---------------------------------------------------------------------------------------------------------------------------
-function go(section, itemId = null) { if (section !== "addgoal") state.addGoal = null; if (section !== "targets") state.targets = null; state.section = section; state.itemId = itemId; state.query = ""; state.sheet = null; render(); $("main").scrollTop = 0; $("list").scrollTop = 0; }
+function go(section, itemId = null) { if (section !== "addgoal") state.addGoal = null; if (section !== "targets") state.targets = null; if (section !== "permissions") state.perm = null; state.section = section; state.itemId = itemId; state.query = ""; state.sheet = null; render(); $("main").scrollTop = 0; $("list").scrollTop = 0; }
 function pane() {
   const sec = SECTIONS.find((s) => s.id === state.section);
-  if (state.section === "home" || state.section === "addgoal" || state.section === "targets" || !sec.built) return "main";
+  if (state.section === "home" || state.section === "addgoal" || state.section === "targets" || state.section === "permissions" || !sec.built) return "main";
   return state.itemId ? "main" : "list";
 }
 
@@ -167,7 +173,7 @@ function listHead(title, { search = false, chips = null } = {}) {
 const soonBadge = () => h("span", { class: "badge soon", text: "Coming soon" });
 
 function renderList() {
-  const s = state.section === "addgoal" || state.section === "targets" ? "goals" : state.section, sec = SECTIONS.find((x) => x.id === s);
+  const s = ["addgoal", "targets", "permissions"].includes(state.section) ? "goals" : state.section, sec = SECTIONS.find((x) => x.id === s);
   if (!state.data) { fill($("list"), listHead(sec.label), h("div", { class: "list-body" }, h("p", { class: "empty", text: "Loading…" }))); return; }
   if (s === "home") {
     const f = facts(), ev = headlineEvents().slice(0, 6);
@@ -313,7 +319,7 @@ function renderHome() {
       h("div", { class: "muted small", text: [candOf(c).geography_label, candOf(c).industry_label].filter((x) => typeof x === "string" && x).join(" · ") }))))),
     h("h3", { text: "Your AI employee" }),
     f.employee ? h("div", { class: "card" }, h("div", { class: "row2" }, h("h3", { text: f.employee.name }), h("span", { class: `badge ${f.employee.status === "active" ? "good" : "bad"}`, text: f.employee.status === "active" ? "Active" : "Switched off" })),
-      h("p", { class: "muted", text: abilities.length ? `Allowed to: ${abilities.join("; ")}.` : "Not allowed to do anything yet." })) : h("div", { class: "card empty", text: "No AI employee in this company yet." }),
+      h("p", { class: "muted", text: abilities.length ? `Allowed to: ${abilities.join("; ")}.` : "Not allowed to do anything yet." }), h("button", { class: "btn ghost block", type: "button", onclick: () => permissions.open() }, "What Ava may do")) : h("div", { class: "card empty", text: "No AI employee in this company yet." }),
     h("div", { class: "card" }, h("div", { class: "row2" }, h("h3", { text: "Needs your approval" }), soonBadge()), h("p", { class: "muted small", text: "When Ava wants to send a message or take a bigger step, it will wait for you here." })),
     h("p", { class: "foot", text: state.data.loadedAt ? `Updated ${new Date(state.data.loadedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.` : "" }),
   ];
@@ -374,6 +380,7 @@ function renderMain() {
   if (!state.data) { fill($("main"), err, h("p", { class: "empty", text: state.loadError ? "" : "Loading…" })); return; }
   if (s === "addgoal") { fill($("main"), err, addGoal.render()); return; }
   if (s === "targets") { fill($("main"), err, targets.render()); return; }
+  if (s === "permissions") { fill($("main"), err, permissions.render()); return; }
   let body;
   if (s === "home") body = renderHome();
   else if (!sec.built) body = renderSoon(sec);
@@ -402,6 +409,7 @@ function renderSheet() {
     h("h3", { text: "Appearance" }),
     h("div", { class: "seg" }, seg("Auto", state.theme === "auto", () => setTheme("auto"), "auto"), seg("Light", state.theme === "light", () => setTheme("light"), "sun"), seg("Dark", state.theme === "dark", () => setTheme("dark"), "moon")),
     h("h3", { text: "This page" }),
+    h("button", { class: "rowbtn", type: "button", onclick: () => { state.sheet = null; permissions.open(); } }, icon("check", 22), "What Ava may do"),
     h("button", { class: "rowbtn", type: "button", onclick: () => { state.sheet = null; targets.open(); } }, icon("goals", 22), "Who you target"),
     h("button", { class: "rowbtn", type: "button", onclick: async () => { state.sheet = null; render(); await reload(true); render(); } }, icon("refresh", 22), "Refresh now"),
     h("button", { class: "rowbtn", type: "button", onclick: async () => { await signOut(); showSignIn(); } }, icon("logout", 22), "Sign out"),
@@ -449,7 +457,7 @@ async function reload(keepMessage = false) {
 async function refreshNow() { await reload(true); render(); }
 
 // ---- sign in / out ------------------------------------------------------------------------------------------------------------------------
-function showSignIn() { $("app").hidden = true; $("sheet-root").replaceChildren(); $("signin").hidden = false; Object.assign(state, { data: null, companies: [], orgId: null, sheet: null, loadError: null, runMessage: null, itemId: null, section: "home", addGoal: null, targets: null }); $("password").value = ""; }
+function showSignIn() { $("app").hidden = true; $("sheet-root").replaceChildren(); $("signin").hidden = false; Object.assign(state, { data: null, companies: [], orgId: null, sheet: null, loadError: null, runMessage: null, itemId: null, section: "home", addGoal: null, targets: null, perm: null }); $("password").value = ""; }
 async function showApp() { $("signin").hidden = true; $("app").hidden = false; render(); await reload(); render(); }
 
 $("signin-form").addEventListener("submit", async (e) => {
