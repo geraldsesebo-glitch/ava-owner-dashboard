@@ -35,6 +35,16 @@ const REASONS = {
   lease_expired: "A search step got stuck and was cancelled. It can be tried again.",
   credential_not_configured: "The search source is missing its access key.",
   provider_credential_not_configured: "The search source is missing its access key.",
+  provider_key_not_configured: "The search source is missing its access key.",
+  unsupported_industry: "The search source cannot search for that kind of company yet.",
+  unsupported_place: "The search source cannot search that place yet.",
+  unsupported_criteria: "The search source cannot search by something the goal asks for (such as company size).",
+  criteria_required: "The goal needs both a kind of company and a place.",
+  provider_returned_more_than_asked: "The search source sent more companies than asked for, so the search stopped to protect your credits.",
+  provider_billed_more_than_asked: "The search source charged more than expected, so the search stopped to protect your credits.",
+  provider_rate_limited: "The search source asked us to slow down. Try again in a minute.",
+  provider_unreachable: "The search source could not be reached.",
+  malformed_provider_response: "The search source sent an answer that could not be read.",
   provider_entitlement_unavailable: "The search source's plan does not allow this search.",
   unsupported_operation: "The search source cannot do that kind of search.",
   invalid_search_request: "The search could not be understood by the source.",
@@ -120,11 +130,11 @@ export function noWebsite(candidate) {
   return typeof c.name === "string" && c.name.trim() !== "" && !(typeof c.domain === "string" && c.domain.trim() !== "");
 }
 
-/** What a search cost in credits, for sources that charge one credit per company returned. Empty for every other source (no invented cost). */
-export function creditsNote(run) {
+/** How many companies the search source handed back for one search. It names no source and invents no cost: the price list (empty today) is what turns this into money. */
+export function returnedNote(run) {
   const n = run?.provider_records_inspected;
-  if (run?.provider_key !== "pdl-company-search" || !Number.isInteger(n) || n < 0) return "";
-  return n === 0 ? "No credits used." : `About ${n} ${n === 1 ? "credit" : "credits"} used (1 credit per company the data service returned).`;
+  if (!Number.isInteger(n) || n <= 0) return "";
+  return `The source returned ${n} ${n === 1 ? "company" : "companies"} for this search.`;
 }
 
 export function dispositionLabel(disposition) {

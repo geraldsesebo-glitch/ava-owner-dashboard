@@ -10,6 +10,12 @@ export const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 export const HELPERS = {
   // The pretend helper. It serves only a company named DEMO and only the pretend source (refused by the helper itself otherwise).
   pretend: "discovery-runner-mock",
-  // The real search runner is NOT switched on yet (no deploy, no source). null = the button stays off for real companies and calls nothing.
-  real: null,
+  // The real search runner. It names NO data source: which source a company uses is decided only by the platform's routing table (a company with no routing row is refused).
+  real: "discovery-runner",
 };
+
+/**
+ * During the first real runs only SMALL goals can be searched from this page (a goal asking for more than this many companies is shown but its search button stays off).
+ * This is a convenience guard on top of the real protection, which lives in the search source's own code (a hard cap per search).
+ */
+export const REAL_RUN_MAX_GOAL = 15;

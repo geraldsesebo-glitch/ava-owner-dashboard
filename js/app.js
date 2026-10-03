@@ -1,10 +1,10 @@
 // The owner dashboard, new look (green / black / white, light and dark). Same data and same buttons as the working dashboard in ../owner-dashboard.
 // Everything shown from the database is put on the page as plain text only (never as markup, never as a link), so nothing a source sends can change the page.
 // Branches do not exist in the database yet: "Main" is only a label for the one place everything lives today. Nothing about branches is invented here.
-import { HELPERS } from "./config.js";
+import { HELPERS, REAL_RUN_MAX_GOAL } from "./config.js";
 import { signIn, signOut, isSignedIn, onSignedOut, rpc, callHelper } from "./api.js";
 import { loadCompanies, loadCompany, loadTargets } from "./data.js";
-import { companyKind, plainReason, runSentence, dispositionLabel, candidateReason, fitSentence, capabilityLabel, goalStatusLabel, goalCriteriaLine, eventSentence, makeResolver, noWebsite, creditsNote, timeAgo, homeStatus } from "./text.js";
+import { companyKind, plainReason, runSentence, dispositionLabel, candidateReason, fitSentence, capabilityLabel, goalStatusLabel, goalCriteriaLine, eventSentence, makeResolver, noWebsite, returnedNote, timeAgo, homeStatus } from "./text.js";
 import { icon } from "./icons.js";
 import { createAddGoal } from "./addgoal.js";
 import { createTargets } from "./targets.js";
@@ -92,6 +92,8 @@ function facts() {
   const latestRun = d.runs[0] || null;
   return {
     employee, goals, latestRun, confirmed: goals.filter((g) => g.status === "confirmed"),
+    // the goals the search buttons may run: for a real company only small ones during the first real runs (see REAL_RUN_MAX_GOAL)
+    runnable: goals.filter((g) => g.status === "confirmed" && (kind() === "pretend" || g.quantity <= REAL_RUN_MAX_GOAL)),
     runningStale: !!latestRun && latestRun.status === "running" && Date.now() - Date.parse(latestRun.updated_at) > STALE_RUN_MS,
     activeJobs: d.jobs.filter((j) => j.status === "active").length,
     canSearch: !!employee && d.authorities.some((x) => x.ai_employee_id === employee.id && x.capability_key === "discover_prospects" && x.enabled === true && x.requires_approval !== true),
@@ -107,6 +109,7 @@ function runBlock(f) {
   if (f.employee.status !== "active") return "The AI employee is switched off.";
   if (kind() === "pretend" ? !HELPERS.pretend : !HELPERS.real) return "Searching is not switched on for this company yet, so nothing can be searched. This will change later.";
   if (f.confirmed.length === 0) return "There is no confirmed goal to search for yet.";
+  if (f.runnable.length === 0) return `For the first real searches only small goals (up to ${REAL_RUN_MAX_GOAL} companies) can be searched. Add or confirm a small goal first.`;
   if (!f.canSearch) return "Ava has not been allowed to search for new companies yet. You can allow it under \u201cWhat Ava may do\u201d (Settings).";
   return null;
 }
@@ -226,7 +229,7 @@ function renderList() {
 function openSoon(name) { state.sheet = { kind: "soon", name }; render(); }
 async function runSearch(objectiveId) {
   const f = facts();
-  if (state.busy || runBlock(f) || !objectiveId) return;
+  if (state.busy || runBlock(f) || !objectiveId || !f.runnable.some((g) => g.id === objectiveId)) return;
   const helper = kind() === "pretend" ? HELPERS.pretend : HELPERS.real;
   const before = f.foundTotal;
   state.busy = true; state.runMessage = null; render();
@@ -296,11 +299,11 @@ function goalCard(g) {
 }
 
 function renderHome() {
-  const f = facts(), o = org(), stopped = isStopped(), block = runBlock(f), pick = f.confirmed.length > 1;
+  const f = facts(), o = org(), stopped = isStopped(), block = runBlock(f), pick = f.runnable.length > 1;
   const st = homeStatus({ org: o, employee: f.employee, latestRun: f.latestRun, runningStale: f.runningStale, activeJobs: f.activeJobs });
   const abilities = state.data.authorities.filter((a) => a.enabled && f.employee && a.ai_employee_id === f.employee.id).map((a) => capabilityLabel(a.capability_key));
   const lastEv = headlineEvents()[0];
-  const target = () => (pick ? $("goal-pick").value : f.confirmed[0]?.id);
+  const target = () => (pick ? $("goal-pick").value : f.runnable[0]?.id);
   const newCos = companyGroups().found.slice(0, 4);
   return [
     h("div", { class: "card hero" },
@@ -308,7 +311,7 @@ function renderHome() {
       h("div", { class: "big", text: state.busy ? "Searching…" : st.title }), h("div", { class: "sub", text: state.busy ? "A search is in progress. This can take up to a minute." : st.line }),
       h("button", { class: "pill-btn pill", type: "button", disabled: !!block || state.busy, onclick: () => runSearch(target()) }, icon("plus", 18), "Run search")),
     lastEv ? h("div", { class: "latest" }, icon("check", 18), h("span", { class: "txt", text: lastEv.s.text }), h("button", { type: "button", onclick: () => go("history", lastEv.ev.id) }, "History ›")) : null,
-    pick ? h("div", { class: "card" }, h("label", { class: "small muted", for: "goal-pick", text: "Search for which goal?" }), h("select", { id: "goal-pick", class: "pick" }, f.confirmed.map((g) => h("option", { value: g.id, text: clip(g.source_goal_text, 70) })))) : null,
+    pick ? h("div", { class: "card" }, h("label", { class: "small muted", for: "goal-pick", text: "Search for which goal?" }), h("select", { id: "goal-pick", class: "pick" }, f.runnable.map((g) => h("option", { value: g.id, text: clip(g.source_goal_text, 70) })))) : null,
     h("div", { class: "card" }, h("div", { class: "tiles" },
       tile("Run search", "run", () => runSearch(target()), { disabled: !!block || state.busy }),
       tile("Add goal", "plus", () => addGoal.open(), { disabled: state.busy }),
@@ -341,11 +344,12 @@ function renderGoalDetail(g) {
       g.latestRun ? h("p", { class: "when", text: `Last search ${timeAgo(g.latestRun.created_at)}` }) : null,
       h("dl", { class: "kv" }, goalCriteriaLine(g.criteria) ? [h("dt", { text: "Looking for" }), h("dd", { text: goalCriteriaLine(g.criteria) })] : null, h("dt", { text: "Branch" }), h("dd", { text: "Main" }), f.employee ? [h("dt", { text: "Ava" }), h("dd", { text: f.employee.name })] : null),
       messageBox(state.runMessage),
-      g.status === "confirmed" ? h("button", { class: "btn primary block bigbtn", type: "button", disabled: !!block || state.busy, onclick: () => runSearch(g.id) }, icon("run", 20), state.busy ? "Searching…" : "Run a search for this goal") : null,
+      g.status === "confirmed" ? h("button", { class: "btn primary block bigbtn", type: "button", disabled: !!block || state.busy || !f.runnable.some((x) => x.id === g.id), onclick: () => runSearch(g.id) }, icon("run", 20), state.busy ? "Searching…" : "Run a search for this goal") : null,
       g.status === "confirmed" && block ? h("p", { class: "muted small", text: block }) : null,
+      g.status === "confirmed" && !block && !f.runnable.some((x) => x.id === g.id) ? h("p", { class: "muted small", text: `This goal asks for more than ${REAL_RUN_MAX_GOAL} companies. For the first real searches only small goals can be searched from here.` }) : null,
       g.status === "awaiting_confirmation" ? h("button", { class: "btn primary block bigbtn", type: "button", onclick: () => addGoal.review(g.id) }, icon("check", 20), "Review and confirm") : null),
     g.runs.length ? h("div", { class: "card" }, h("h3", { text: `${g.runs.length} ${word(g.runs.length, "search", "searches")} so far` }),
-      h("div", { class: "cardlist" }, g.runs.slice(0, 10).map((r) => { const s = runSentence(r, g.quantity, state.data.candidates.filter((c) => c.run_id === r.id && c.disposition === "discovered").length); return h("div", { class: "li" }, h("div", { text: s.text }), creditsNote(r) ? h("div", { class: "muted small", text: creditsNote(r) }) : null, h("div", { class: "when", text: timeAgo(r.created_at) })); }))) : null,
+      h("div", { class: "cardlist" }, g.runs.slice(0, 10).map((r) => { const s = runSentence(r, g.quantity, state.data.candidates.filter((c) => c.run_id === r.id && c.disposition === "discovered").length); return h("div", { class: "li" }, h("div", { text: s.text }), returnedNote(r) ? h("div", { class: "muted small", text: returnedNote(r) }) : null, h("div", { class: "when", text: timeAgo(r.created_at) })); }))) : null,
   ];
 }
 function renderCompanyDetail(c) {
