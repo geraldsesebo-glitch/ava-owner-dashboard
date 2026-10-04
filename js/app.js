@@ -10,6 +10,14 @@ import { createAddGoal } from "./addgoal.js";
 import { createTargets } from "./targets.js";
 import { createPermissions } from "./permissions.js";
 import { createProviderTest } from "./providertest.js";
+import { createCosts } from "./costs.js";
+import { createImporter } from "./importer.js";
+import { createCompanyInfo } from "./companyinfo.js";
+import { createTemplates } from "./templates.js";
+import { createPipeline } from "./pipeline.js";
+import { createCompanyDetail } from "./companydetail.js";
+import { usageLines } from "./cost-logic.js";
+import { STAGES } from "./pipeline-logic.js";
 
 const $ = (id) => document.getElementById(id);
 const STALE_RUN_MS = 10 * 60 * 1000;
@@ -23,21 +31,25 @@ const SECTIONS = [
   { id: "companies", label: "Companies", icon: "companies", built: true },
   { id: "outreach", label: "Outreach", icon: "outreach", built: false },
   { id: "inbox", label: "Inbox", icon: "inbox", built: false },
-  { id: "pipeline", label: "Pipeline", icon: "pipeline", built: false },
+  { id: "pipeline", label: "Pipeline", icon: "pipeline", built: true },
   { id: "history", label: "History", icon: "history", built: true },
   { id: "addgoal", label: "Add goal", icon: "plus", built: true, hidden: true },
   { id: "targets", label: "Who you target", icon: "goals", built: true, hidden: true },
   { id: "permissions", label: "What Ava may do", icon: "goals", built: true, hidden: true },
   { id: "providertest", label: "Provider test", icon: "goals", built: true, hidden: true },
+  { id: "import", label: "Import my list", icon: "plus", built: true, hidden: true },
+  { id: "companyinfo", label: "Company information", icon: "companies", built: true, hidden: true },
+  { id: "templates", label: "Message templates", icon: "outreach", built: true, hidden: true },
+  { id: "costs", label: "What things cost", icon: "check", built: true, hidden: true },
+  { id: "company", label: "Company", icon: "companies", built: true, hidden: true },
 ];
 const SOON = {
   outreach: "Ava will write first messages to the companies she found, and wait for your OK before anything is sent.",
   inbox: "Replies from companies will arrive here, with Ava’s suggested answer ready for you to approve.",
-  pipeline: "See every company move from “found” to “talking” to “customer”.",
 };
 const TABS = ["home", "goals", "companies", "history", "more"];
 
-const state = { companies: [], orgId: null, data: null, section: "home", itemId: null, filter: "found", historyAll: false, query: "", busy: false, runMessage: null, sheet: null, theme: loadTheme(), loadId: 0, loadError: null, addGoal: null, targets: null, perm: null, pt: null };
+const state = { companies: [], orgId: null, data: null, section: "home", itemId: null, filter: "found", historyAll: false, query: "", busy: false, runMessage: null, sheet: null, theme: loadTheme(), loadId: 0, loadError: null, addGoal: null, targets: null, perm: null, pt: null, imp: null, ci: null, tpl: null, costs: null, pipe: null, co: null };
 // the Add goal screen (uses only the existing goal reader and its confirm step)
 const addGoal = createAddGoal({ h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), call: callHelper, openTargets: () => targets.open() });
 // the "Who you target" screen (uses only the existing owner-only set_knowledge path)
@@ -46,6 +58,21 @@ const targets = createTargets({ h, icon, state, render: () => render(), reload: 
 const permissions = createPermissions({ h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), rpc });
 // the "Provider test" screen (one owner-only test function with a fixed, capped test; nothing is saved)
 const providerTest = createProviderTest({ h, icon, state, render: () => render(), go: (s, i) => go(s, i), call: callHelper });
+
+// the screens added for the thin end-to-end loop (each uses only owner-only platform functions; see the file headers)
+const loopCtx = { h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), rpc, openTargets: () => targets.open(), openCompany: (id) => company.open(id), openImport: () => importer.open() };
+const costs = createCosts(loopCtx);
+const importer = createImporter(loopCtx);
+const companyInfo = createCompanyInfo(loopCtx);
+const templates = createTemplates(loopCtx);
+const pipeline = createPipeline(loopCtx);
+const company = createCompanyDetail(loopCtx);
+const SCREENS = { import: importer, companyinfo: companyInfo, templates, costs, pipeline, company };
+/** Hidden screens and the state each one keeps (cleared when you leave it), and which list the left column shows beside it. */
+const SCREEN_STATE = { addgoal: "addGoal", targets: "targets", permissions: "perm", providertest: "pt", import: "imp", companyinfo: "ci", templates: "tpl", costs: "costs", pipeline: "pipe", company: "co" };
+const FULL = new Set(["home", "addgoal", "targets", "permissions", "providertest", "import", "companyinfo", "templates", "costs", "pipeline", "company"]);
+const LIST_FOR = { addgoal: "goals", targets: "goals", permissions: "goals", providertest: "goals", import: "companies", company: "pipeline", companyinfo: "home", templates: "home", costs: "home" };
+const FORMS = new Set(["import", "companyinfo", "templates", "costs", "addgoal", "targets"]);
 
 // ---- small helpers ------------------------------------------------------------------------------------------------------------------------
 function h(tag, props, ...kids) {
@@ -122,6 +149,7 @@ function companyGroups() {
     found: d.candidates.filter((c) => c.disposition === "discovered"),
     aside: d.candidates.filter((c) => c.run_id === latest && ["rejected_outside", "insufficient_evidence", "malformed", "duplicate_in_run"].includes(c.disposition)),
     known: d.candidates.filter((c) => c.run_id === latest && c.disposition === "already_known"),
+    yours: d.pipeline.filter((r) => r.on_owner_list),
   };
 }
 const candOf = (c) => (c.candidate && typeof c.candidate === "object" ? c.candidate : {});
@@ -129,6 +157,7 @@ const matches = (text) => state.query.trim() === "" || text.toLowerCase().includ
 function itemsFor(section) {
   if (!state.data) return [];
   if (section === "goals") return facts().goals.filter((g) => matches(g.source_goal_text));
+  if (section === "companies" && state.filter === "yours") return companyGroups().yours.filter((r) => matches(`${r.name ?? ""} ${r.place ?? ""} ${r.website ?? ""}`)).map((r) => ({ ...r, id: r.subject_id }));
   if (section === "companies") return companyGroups()[state.filter].filter((c) => matches(`${candOf(c).name ?? ""} ${candOf(c).geography_label ?? ""} ${candOf(c).industry_label ?? ""}`));
   if (section === "history") return state.data.audit.map((ev) => ({ id: ev.id, ev, s: describe(ev) })).filter((x) => (state.historyAll || x.s.headline) && matches(x.s.text));
   return [];
@@ -139,10 +168,10 @@ function currentItem() {
 }
 
 // ---- navigation ---------------------------------------------------------------------------------------------------------------------------
-function go(section, itemId = null) { if (section !== "addgoal") state.addGoal = null; if (section !== "targets") state.targets = null; if (section !== "permissions") state.perm = null; if (section !== "providertest") state.pt = null; state.section = section; state.itemId = itemId; state.query = ""; state.sheet = null; render(); $("main").scrollTop = 0; $("list").scrollTop = 0; }
+function go(section, itemId = null) { for (const [sec, key] of Object.entries(SCREEN_STATE)) if (section !== sec) state[key] = null; state.section = section; state.itemId = itemId; state.query = ""; state.sheet = null; render(); $("main").scrollTop = 0; $("list").scrollTop = 0; }
 function pane() {
   const sec = SECTIONS.find((s) => s.id === state.section);
-  if (state.section === "home" || state.section === "addgoal" || state.section === "targets" || state.section === "permissions" || state.section === "providertest" || !sec.built) return "main";
+  if (FULL.has(state.section) || !sec.built) return "main";
   return state.itemId ? "main" : "list";
 }
 
@@ -182,7 +211,7 @@ function listHead(title, { search = false, chips = null } = {}) {
 const soonBadge = () => h("span", { class: "badge soon", text: "Coming soon" });
 
 function renderList() {
-  const s = ["addgoal", "targets", "permissions", "providertest"].includes(state.section) ? "goals" : state.section, sec = SECTIONS.find((x) => x.id === s);
+  const s = LIST_FOR[state.section] ?? state.section, sec = SECTIONS.find((x) => x.id === s);
   if (!state.data) { fill($("list"), listHead(sec.label), h("div", { class: "list-body" }, h("p", { class: "empty", text: "Loading…" }))); return; }
   if (s === "home") {
     const f = facts(), ev = headlineEvents().slice(0, 6);
@@ -195,6 +224,11 @@ function renderList() {
       ev.length === 0 ? h("p", { class: "empty", text: "Nothing has happened yet." }) : ev.map(({ ev: e, s: t }) => h("button", { class: "item", type: "button", onclick: () => go("history", e.id) }, h("span", { class: "t", text: t.text }), h("span", { class: "s", text: timeAgo(e.created_at) })))));
     return;
   }
+  if (s === "pipeline") {
+    const g = {}; for (const r of state.data.pipeline) g[r.stage] = (g[r.stage] || 0) + 1;
+    fill($("list"), listHead("Pipeline"), h("div", { class: "list-body" }, STAGES.map((x) => h("button", { class: "item", type: "button", onclick: () => { state.pipe = { filter: state.pipe?.filter ?? "all", query: "", stage: x.key }; go("pipeline"); state.pipe = { filter: "all", query: "", stage: x.key }; render(); } }, h("span", { class: "row" }, h("span", { class: "t", text: x.label }), h("span", { class: "badge", text: String(g[x.key] || 0) })), h("span", { class: "s", text: x.hint })))));
+    return;
+  }
   if (!sec.built) {
     fill($("list"), listHead(sec.label), h("div", { class: "list-body" }, h("div", { class: "item soon" }, h("span", { class: "row" }, h("span", { class: "t", text: sec.label }), soonBadge()), h("span", { class: "s", text: "Not built yet." }))));
     return;
@@ -202,7 +236,7 @@ function renderList() {
   const items = itemsFor(s);
   let chips = null, head = sec.label;
   if (s === "companies") {
-    const g = companyGroups(), labels = { found: "Found", aside: "Set aside", known: "Already known" };
+    const g = companyGroups(), labels = { found: "Found", aside: "Set aside", known: "Already known", yours: "Your list" };
     chips = h("div", { class: "chips", role: "group", "aria-label": "Show" }, Object.keys(labels).map((k) => h("button", { type: "button", "aria-pressed": String(state.filter === k), onclick: () => { state.filter = k; state.itemId = null; render(); } }, `${labels[k]} (${g[k].length})`)));
   }
   if (s === "history") {
@@ -211,11 +245,14 @@ function renderList() {
       h("button", { type: "button", "aria-pressed": String(state.historyAll), onclick: () => { state.historyAll = true; state.itemId = null; render(); } }, "Every step"));
   }
   const cur = currentItem();
-  const rows = items.length === 0 ? h("p", { class: "empty", text: s === "goals" ? "No goals yet." : s === "companies" ? (state.filter === "found" ? "No companies found yet." : "Nothing here.") : "Nothing has happened yet." }) : items.slice(0, 200).map((i) => {
+  const rows = items.length === 0 ? h("p", { class: "empty", text: s === "goals" ? "No goals yet." : s === "companies" ? (state.filter === "yours" ? "Nothing on your list yet. Use Import my list in Settings." : state.filter === "found" ? "No companies found yet." : "Nothing here.") : "Nothing has happened yet." }) : items.slice(0, 200).map((i) => {
     const on = String(cur?.id === i.id);
     if (s === "goals") return h("button", { class: "item", type: "button", "aria-current": on, onclick: () => go(s, i.id) },
       h("span", { class: "row" }, h("span", { class: "t", text: clip(i.source_goal_text, 80) }), h("span", { class: `badge ${i.status === "confirmed" ? "good" : i.status === "cancelled" ? "" : "warn"}`, text: goalStatusLabel(i.status) })),
       h("span", { class: "s", text: `${i.found} of ${i.quantity} found` }));
+    if (s === "companies" && state.filter === "yours") return h("button", { class: "item", type: "button", onclick: () => company.open(i.subject_id) },
+      h("span", { class: "row" }, h("span", { class: "t", text: clip(i.name, 70) || "(no name)" }), h("span", { class: `badge ${i.opted_out ? "bad" : "good"}`, text: i.opted_out ? "Do not contact" : "Your list" })),
+      h("span", { class: "s", text: [i.place, i.website || "no website"].filter(Boolean).join(" · ") }));
     if (s === "companies") { const c = candOf(i); return h("button", { class: "item", type: "button", "aria-current": on, onclick: () => go(s, i.id) },
       h("span", { class: "row" }, h("span", { class: "t", text: clip(c.name, 70) || "(no name)" }), h("span", { class: `badge ${i.disposition === "discovered" ? "good" : i.disposition === "already_known" ? "wait" : "warn"}`, text: dispositionLabel(i.disposition) })),
       h("span", { class: "s", text: [c.geography_label, c.industry_label, noWebsite(c) ? "no website" : null].filter((x) => typeof x === "string" && x).join(" · ") || candidateReason(i) })); }
@@ -298,6 +335,18 @@ function goalCard(g) {
     bar(g.quantity > 0 ? g.found / g.quantity : 0), h("span", { class: "s", text: `Found ${g.found} of ${g.quantity}` }));
 }
 
+/** Home extras: what has been spent this month (from the platform's ledger) and a short "your list" card. Source-neutral; nothing here is worked out by the page. */
+function homeLoopCards() {
+  const d = state.data, usage = usageLines(d.usage), mine = d.pipeline.filter((r) => r.on_owner_list).length, all = d.pipeline.length;
+  return [
+    h("div", { class: "card" }, h("div", { class: "row2" }, h("h3", { text: "Your companies" }), h("span", { class: "badge", text: `${all} in all` })),
+      h("p", { class: "muted", text: mine ? `${mine} ${word(mine, "company is", "companies are")} on your own list.` : "You have not added your own list yet." }),
+      h("div", { class: "chips" }, h("button", { type: "button", onclick: () => importer.open() }, "Import my list"), h("button", { type: "button", onclick: () => pipeline.open() }, "Open the Pipeline"), h("button", { type: "button", onclick: () => companyInfo.open() }, "Company information"))),
+    h("div", { class: "card" }, h("h3", { text: "This month so far" }),
+      usage.length ? h("ul", { class: "plain" }, usage.map((u) => h("li", { text: u }))) : h("p", { class: "muted", text: "Nothing spent yet." }),
+      h("button", { class: "textbtn", type: "button", onclick: () => costs.open() }, "What things cost")),
+  ];
+}
 function renderHome() {
   const f = facts(), o = org(), stopped = isStopped(), block = runBlock(f), pick = f.runnable.length > 1;
   const st = homeStatus({ org: o, employee: f.employee, latestRun: f.latestRun, runningStale: f.runningStale, activeJobs: f.activeJobs });
@@ -310,6 +359,7 @@ function renderHome() {
       h("div", { class: "label" }, icon("branch", 16), `Main branch${f.employee ? ` · ${f.employee.name}` : ""}`),
       h("div", { class: "big", text: state.busy ? "Searching…" : st.title }), h("div", { class: "sub", text: state.busy ? "A search is in progress. This can take up to a minute." : st.line }),
       h("button", { class: "pill-btn pill", type: "button", disabled: !!block || state.busy, onclick: () => runSearch(target()) }, icon("plus", 18), "Run search")),
+    homeLoopCards(),
     lastEv ? h("div", { class: "latest" }, icon("check", 18), h("span", { class: "txt", text: lastEv.s.text }), h("button", { type: "button", onclick: () => go("history", lastEv.ev.id) }, "History ›")) : null,
     pick ? h("div", { class: "card" }, h("label", { class: "small muted", for: "goal-pick", text: "Search for which goal?" }), h("select", { id: "goal-pick", class: "pick" }, f.runnable.map((g) => h("option", { value: g.id, text: clip(g.source_goal_text, 70) })))) : null,
     h("div", { class: "card" }, h("div", { class: "tiles" },
@@ -391,13 +441,15 @@ function renderMain() {
   if (s === "addgoal") { fill($("main"), err, addGoal.render()); return; }
   if (s === "targets") { fill($("main"), err, targets.render()); return; }
   if (s === "permissions") { fill($("main"), err, permissions.render()); return; }
+  if (SCREENS[s]) { fill($("main"), err, SCREENS[s].render()); return; }
   if (s === "providertest") { fill($("main"), err, providerTest.render()); return; }
   let body;
   if (s === "home") body = renderHome();
   else if (!sec.built) body = renderSoon(sec);
   else {
-    const it = currentItem();
-    body = it ? (s === "goals" ? renderGoalDetail(it) : s === "companies" ? renderCompanyDetail(it) : renderHistoryDetail(it)) : [s === "goals" ? h("div", { class: "empty" }, h("p", { text: "No goals yet." }), h("button", { class: "btn primary", type: "button", onclick: () => addGoal.open() }, "Add your first goal")) : h("p", { class: "empty", text: "Pick something from the list." })];
+    const it = s === "companies" && state.filter === "yours" ? null : currentItem();
+    if (s === "companies" && state.filter === "yours") body = [h("div", { class: "card" }, h("h3", { text: "Your list" }), h("p", { class: "muted", text: "Companies you added yourself. Pick one on the left to see it, or open the Pipeline to see where every company is." }), h("button", { class: "btn primary", type: "button", onclick: () => importer.open() }, "Import my list"), " ", h("button", { class: "btn ghost", type: "button", onclick: () => pipeline.open() }, "Open the Pipeline"))];
+    else body = it ? (s === "goals" ? renderGoalDetail(it) : s === "companies" ? renderCompanyDetail(it) : renderHistoryDetail(it)) : [s === "goals" ? h("div", { class: "empty" }, h("p", { text: "No goals yet." }), h("button", { class: "btn primary", type: "button", onclick: () => addGoal.open() }, "Add your first goal")) : h("p", { class: "empty", text: "Pick something from the list." })];
   }
   fill($("main"), err, s === "home" ? null : h("button", { class: "back", type: "button", onclick: () => { state.itemId = null; render(); } }, icon("back", 18), sec.label), s === "home" ? h("h1", { class: "page-title", text: org()?.name ?? "Home" }) : null, body);
 }
@@ -422,6 +474,10 @@ function renderSheet() {
     h("h3", { text: "This page" }),
     h("button", { class: "rowbtn", type: "button", onclick: () => { state.sheet = null; permissions.open(); } }, icon("check", 22), "What Ava may do"),
     h("button", { class: "rowbtn", type: "button", onclick: () => { state.sheet = null; targets.open(); } }, icon("goals", 22), "Who you target"),
+    h("button", { class: "rowbtn", type: "button", onclick: () => { state.sheet = null; importer.open(); } }, icon("plus", 22), "Import my list"),
+    h("button", { class: "rowbtn", type: "button", onclick: () => { state.sheet = null; companyInfo.open(); } }, icon("companies", 22), "Company information"),
+    h("button", { class: "rowbtn", type: "button", onclick: () => { state.sheet = null; templates.open(); } }, icon("outreach", 22), "Message templates"),
+    h("button", { class: "rowbtn", type: "button", onclick: () => { state.sheet = null; costs.open(); } }, icon("check", 22), "What things cost"),
     h("button", { class: "rowbtn", type: "button", onclick: () => { state.sheet = null; providerTest.open(); } }, icon("refresh", 22), "Provider test"),
     h("button", { class: "rowbtn", type: "button", onclick: async () => { state.sheet = null; render(); await reload(true); render(); } }, icon("refresh", 22), "Refresh now"),
     h("button", { class: "rowbtn", type: "button", onclick: async () => { await signOut(); showSignIn(); } }, icon("logout", 22), "Sign out"),
@@ -430,7 +486,7 @@ function renderSheet() {
   if (sh.kind === "soon") content = [h("h2", { text: sh.name }), soonBadge(), h("p", { class: "muted", text: "This part is not built yet. It is shown here so you can see where it will live." }), h("button", { class: "btn primary block", type: "button", onclick: close }, "OK")];
   else if (sh.kind === "resume") content = [h("h2", { text: "Let Ava work again?" }), h("p", { class: "muted", text: "This switches the Emergency stop off for this company." }), h("button", { class: "btn primary block", type: "button", onclick: () => setStop(false) }, "Yes, resume"), h("button", { class: "btn ghost block", type: "button", onclick: close }, "Not yet")];
   else if (sh.kind === "settings") content = [h("h2", { text: "Settings" }), settings];
-  else content = [h("h2", { text: "More" }), h("div", { class: "menu" }, ["outreach", "inbox", "pipeline"].map((id) => { const s = SECTIONS.find((x) => x.id === id); return h("button", { type: "button", onclick: () => go(id) }, icon(s.icon, 24), s.label, soonBadge()); })), settings];
+  else content = [h("h2", { text: "More" }), h("div", { class: "menu" }, ["outreach", "inbox", "pipeline"].map((id) => { const s = SECTIONS.find((x) => x.id === id); return h("button", { type: "button", onclick: () => go(id) }, icon(s.icon, 24), s.label, s.built ? null : soonBadge()); })), settings];
   const sheet = h("div", { class: "sheet", role: "dialog", "aria-modal": "true", tabindex: "-1" }, content);
   const overlay = h("div", { class: "overlay", onclick: (e) => { if (e.target === overlay) close(); } }, sheet);
   fill(root, overlay);
@@ -469,7 +525,7 @@ async function reload(keepMessage = false) {
 async function refreshNow() { await reload(true); render(); }
 
 // ---- sign in / out ------------------------------------------------------------------------------------------------------------------------
-function showSignIn() { $("app").hidden = true; $("sheet-root").replaceChildren(); $("signin").hidden = false; Object.assign(state, { data: null, companies: [], orgId: null, sheet: null, loadError: null, runMessage: null, itemId: null, section: "home", addGoal: null, targets: null, perm: null, pt: null }); $("password").value = ""; }
+function showSignIn() { $("app").hidden = true; $("sheet-root").replaceChildren(); $("signin").hidden = false; Object.assign(state, { data: null, companies: [], orgId: null, sheet: null, loadError: null, runMessage: null, itemId: null, section: "home", addGoal: null, targets: null, perm: null, pt: null, imp: null, ci: null, tpl: null, costs: null, pipe: null, co: null }); $("password").value = ""; }
 async function showApp() { $("signin").hidden = true; $("app").hidden = false; render(); await reload(); render(); }
 
 $("signin-form").addEventListener("submit", async (e) => {
@@ -487,8 +543,10 @@ $("signin-form").addEventListener("submit", async (e) => {
 onSignedOut(showSignIn);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && state.sheet) { state.sheet = null; render(); } });
 desktop.addEventListener("change", () => { if (state.data) render(); });
-setInterval(() => { if (isSignedIn() && !document.hidden && !state.busy && !state.sheet) refreshNow(); }, 30000);
-document.addEventListener("visibilitychange", () => { if (isSignedIn() && !document.hidden && !state.busy && !state.sheet) refreshNow(); });
+// background refresh never runs while a form screen is open, so nothing the owner is typing is disturbed
+const idle = () => isSignedIn() && !document.hidden && !state.busy && !state.sheet && !FORMS.has(state.section);
+setInterval(() => { if (idle()) refreshNow(); }, 30000);
+document.addEventListener("visibilitychange", () => { if (idle()) refreshNow(); });
 
 applyTheme();
 if (isSignedIn()) await showApp(); else showSignIn();

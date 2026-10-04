@@ -1,5 +1,6 @@
 // Reads. Every call is made with the signed-in person's own session, so the database only ever returns rows of companies they belong to.
-import { select } from "./api.js";
+import { select, rpc } from "./api.js";
+import { monthStart } from "./cost-logic.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -22,11 +23,20 @@ export async function loadCompany(orgId) {
   ]);
   // which job each logged run belonged to: only used to put a company name in a history line, so a failed read just makes those lines plainer
   const execs = await select(`executions?${o}&select=id,work_item_id&order=created_at.desc&limit=300`);
+  // the owner's own list, contacts, prices and this month's usage: not essential, so a failed read just leaves them empty (the screens then say so)
+  const [pipe, contacts, prices, usage] = await Promise.all([
+    select(`company_pipeline?${o}&select=subject_id,name,lifecycle_stage_key,needs_review,created_at,on_owner_list,origin,verification,last_checked_at,website,place,contact_count,opted_out,stage&order=created_at.desc&limit=500`),
+    select(`company_contacts?${o}&select=id,company_subject_id,name,email,phone,origin,opted_out_at,created_at&order=created_at.asc&limit=1000`),
+    select(`provider_price_book?${o}&effective_to=is.null&select=provider_key,item_key,unit_type,unit_price,currency,effective_from`),
+    rpc("usage_summary", { p_org_id: orgId, p_work_item_id: null, p_since: monthStart(), p_until: null }),
+  ]);
   const all = [emps, auths, goals, runs, cands, jobs, audit];
   if (all.some((r) => !r.ok || !Array.isArray(r.data))) return { ok: false, status: all.find((r) => !r.ok)?.status };
   return {
     ok: true,
     employees: emps.data, authorities: auths.data, goals: goals.data, runs: runs.data, candidates: cands.data, jobs: jobs.data, audit: audit.data, executions: execs.ok && Array.isArray(execs.data) ? execs.data : [],
+    pipeline: pipe.ok && Array.isArray(pipe.data) ? pipe.data : [], contacts: contacts.ok && Array.isArray(contacts.data) ? contacts.data : [],
+    prices: prices.ok && Array.isArray(prices.data) ? prices.data : [], usage: usage.ok && Array.isArray(usage.data) ? usage.data : [],
     loadedAt: Date.now(),
   };
 }
@@ -55,4 +65,19 @@ export async function loadTargets(orgId) {
 export async function loadVocabulary() {
   const r = await select("platform_vocabulary_terms?select=kind,term_key,label,parent_key,depth&order=kind,depth,term_key");
   return r.ok && Array.isArray(r.data) ? r.data : null;
+}
+
+/** The company's own information and templates: every knowledge item with its versions (confirmed and draft). Read when a screen that needs it is opened. */
+export async function loadKnowledge(orgId) {
+  if (!UUID.test(orgId)) return { ok: false };
+  const k = await select(`organizational_knowledge?org_id=eq.${orgId}&slot_key=in.(company_name,company_description,offering,target_company_sizes,sales_note,message_templates)&select=id,slot_key,item_key,status&limit=200`);
+  if (!k.ok || !Array.isArray(k.data)) return { ok: false };
+  const ids = k.data.map((x) => x.id).filter((x) => UUID.test(x));
+  let versions = [];
+  if (ids.length) {
+    const v = await select(`organizational_knowledge_versions?knowledge_id=in.(${ids.join(",")})&status=in.(confirmed,draft)&select=knowledge_id,version_no,value,status,confirmed_at,created_at&order=version_no.desc&limit=1000`);
+    if (!v.ok || !Array.isArray(v.data)) return { ok: false };
+    versions = v.data;
+  }
+  return { ok: true, rows: k.data, versions };
 }
