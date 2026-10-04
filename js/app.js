@@ -2,7 +2,7 @@
 // Everything shown from the database is put on the page as plain text only (never as markup, never as a link), so nothing a source sends can change the page.
 // Branches do not exist in the database yet: "Main" is only a label for the one place everything lives today. Nothing about branches is invented here.
 import { HELPERS, REAL_RUN_MAX_GOAL } from "./config.js";
-import { signIn, signOut, isSignedIn, onSignedOut, rpc, callHelper } from "./api.js";
+import { signIn, signOut, isSignedIn, onSignedOut, rpc, select, callHelper } from "./api.js";
 import { loadCompanies, loadCompany, loadTargets } from "./data.js";
 import { companyKind, plainReason, runSentence, dispositionLabel, candidateReason, fitSentence, capabilityLabel, goalStatusLabel, goalCriteriaLine, eventSentence, makeResolver, noWebsite, returnedNote, timeAgo, homeStatus } from "./text.js";
 import { icon } from "./icons.js";
@@ -16,6 +16,7 @@ import { createCompanyInfo } from "./companyinfo.js";
 import { createTemplates } from "./templates.js";
 import { createPipeline } from "./pipeline.js";
 import { createCompanyDetail } from "./companydetail.js";
+import { createResearch } from "./research.js";
 import { usageLines } from "./cost-logic.js";
 import { STAGES } from "./pipeline-logic.js";
 
@@ -60,7 +61,9 @@ const permissions = createPermissions({ h, icon, state, render: () => render(), 
 const providerTest = createProviderTest({ h, icon, state, render: () => render(), go: (s, i) => go(s, i), call: callHelper });
 
 // the screens added for the thin end-to-end loop (each uses only owner-only platform functions; see the file headers)
-const loopCtx = { h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), rpc, openTargets: () => targets.open(), openCompany: (id) => company.open(id), openImport: () => importer.open() };
+const loopCtx = { h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), rpc, openTargets: () => targets.open(), openCompany: (id) => company.open(id), openImport: () => importer.open(), call: callHelper, select };
+const research = createResearch(loopCtx);
+loopCtx.research = research;
 const costs = createCosts(loopCtx);
 const importer = createImporter(loopCtx);
 const companyInfo = createCompanyInfo(loopCtx);

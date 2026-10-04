@@ -6,12 +6,15 @@ export const PERMISSIONS = [
   { key: "research_prospect", label: "Look up facts about a company", detail: "Ava can check a company's details from outside sources.", switchable: false },
   { key: "discover_prospects", label: "Search for new companies", detail: "Ava can look for new companies that fit a goal you have confirmed.", switchable: true },
   { key: "run_discovery_unattended", label: "Search on her own, without being asked", detail: "Not available yet.", switchable: false },
-  { key: "qualify_prospect", label: "Judge whether a company is a good fit", detail: "Not available yet.", switchable: false },
+  { key: "qualify_prospect", label: "Judge whether a company is a good fit", detail: "Ava can read a company's own public website and say how well it fits what you sell. It uses a little AI money (at most $0.02 per company per month). It contacts nobody.", switchable: true },
   { key: "engage_prospect", label: "Contact a company", detail: "Not available yet. Ava will never contact anyone without this.", switchable: false },
   { key: "follow_up", label: "Carry on a conversation with a company", detail: "Not available yet.", switchable: false },
   { key: "record_opportunity", label: "Record a sales opportunity", detail: "Not available yet.", switchable: false },
 ];
 export const SEARCH_KEY = "discover_prospects";
+export const FIT_KEY = "qualify_prospect";
+export const FIT_NOTE = "Allowing this does NOT start any research. Research only runs when you press a Research button. Ava reads only the company's own public website, uses the cheap AI model, never sends it contact details, and nothing is sent to anyone.";
+const plainAllowed = (key) => key === SEARCH_KEY || key === FIT_KEY;
 
 /** The one thing to say, clearly, about the search permission. */
 export const NO_SEARCH_NOTE = "Allowing Ava to search does NOT start any search. A search only runs when you press “Run a search now”, and no real data source is switched on yet, so nothing real can be searched. This only gives Ava the right to search later.";
@@ -34,12 +37,17 @@ export const stateTone = (s) => (s === "allowed" ? "good" : s === "asks" ? "warn
 export function rpcArgs(orgId, employeeId, key, row, on) {
   return {
     p_org_id: orgId, p_ai_employee_id: employeeId, p_capability_key: key, p_enabled: on === true,
-    p_requires_approval: key === SEARCH_KEY && on ? false : row?.requires_approval === true,
+    p_requires_approval: plainAllowed(key) && on ? false : row?.requires_approval === true,
     p_limits: plainObj(row?.limits), p_context: plainObj(row?.context),
   };
 }
 
 export function confirmCopy(key, on, who) {
+  if (key === FIT_KEY) {
+    return on
+      ? { title: `Allow ${who} to judge whether companies fit?`, body: "This gives her the right to read a company's own public website and say how well it fits what you sell. It does not start any research and contacts nobody.", yes: "Yes, allow it", no: "Not now" }
+      : { title: `Stop ${who} from judging fit?`, body: "She will not be able to research companies until you allow it again. Answers already saved are kept.", yes: "Yes, switch it off", no: "Keep it on" };
+  }
   if (key !== SEARCH_KEY) return null;
   return on
     ? { title: `Allow ${who} to search for new companies?`, body: "This gives her the right to search for new companies for goals you have confirmed. It does not start a search.", yes: "Yes, allow it", no: "Not now" }

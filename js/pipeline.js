@@ -1,6 +1,7 @@
 // The Pipeline screen: every company in its stage (Found -> Researched -> Qualified -> Drafted -> Approved -> Contacted -> Replied), with a CSV download.
 // Read-only: the stages come from the platform's records, so nothing here can move a company by hand.
 import { STAGES, FILTERS, filterRows, groupByStage, originText, toCsv } from "./pipeline-logic.js";
+import { fitWords, fitTone } from "./research-logic.js";
 
 export function createPipeline(ctx) {
   const { h, icon, state: app } = ctx;
@@ -26,7 +27,8 @@ export function createPipeline(ctx) {
         h("span", { class: `badge ${r.on_owner_list ? "good" : ""}`, text: originText(r) }),
         r.opted_out ? h("span", { class: "badge bad", text: "Do not contact" }) : null,
         r.needs_review ? h("span", { class: "badge warn", text: "Check for duplicate" }) : null,
-        !r.website ? h("span", { class: "badge", text: "no website" }) : null));
+        !r.website ? h("span", { class: "badge warn", text: "needs a website" }) : null,
+        r.fit_label ? h("span", { class: `badge ${fitTone(r.fit_label)}`, text: fitWords(r.fit_label) }) : null));
   }
 
   function render() {
@@ -40,6 +42,7 @@ export function createPipeline(ctx) {
         h("div", { class: "chips", role: "group", "aria-label": "Show" }, FILTERS.map((f) => h("button", { type: "button", "aria-pressed": String(s.filter === f.key), onclick: () => set({ filter: f.key }) }, f.label))),
         h("label", { class: "searchbox inline" }, icon("search", 18), h("span", { class: "sr-only", text: "Search" }), h("input", { type: "search", placeholder: "Search", value: s.query, id: "pipe-q", oninput: (e) => { st().query = e.target.value; ctx.render(); const again = document.getElementById("pipe-q"); if (again) { again.focus(); again.setSelectionRange(e.target.selectionStart, e.target.selectionStart); } } })),
         h("button", { class: "btn ghost", type: "button", disabled: all.length === 0, onclick: download }, icon("pipeline", 18), "Download as CSV")),
+      all.length > 0 ? ctx.research.strip(all) : null,
       all.length === 0 ? h("div", { class: "card empty" }, h("p", { text: "No companies yet. Add your own list, or run a search." }), h("button", { class: "btn primary", type: "button", onclick: () => ctx.openImport() }, "Import my list")) : null,
       h("div", { class: "stagechips", role: "group", "aria-label": "Stage" }, STAGES.map((g) => h("button", { type: "button", "aria-pressed": String(s.stage === g.key), onclick: () => set({ stage: g.key }) }, `${g.label} (${groups[g.key].length})`))),
       h("div", { class: "pipe" }, STAGES.map((g) => h("section", { class: "pipecol", "data-on": String(s.stage === g.key), "aria-label": g.label },

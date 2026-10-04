@@ -18,7 +18,7 @@ const norm = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9_ ]+/g, " ").
 
 export const SAMPLE = [
   "company,website,place,contact name,email,phone",
-  "Example Guard Services,exampleguard.com,Lagos,Ada Example,ada@exampleguard.com,+234 800 000 0000",
+  "Example Guard Services,exampleguard.com,Lagos,Ada Example,ada@example.com,+234 800 000 0000",
   "Sample Patrol Ltd,,Abuja,,,",
 ].join("\n");
 

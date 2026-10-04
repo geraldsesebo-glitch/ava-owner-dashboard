@@ -41,6 +41,7 @@ export function createCompanyDetail(ctx) {
           h("dt", { text: "Place" }), h("dd", { text: r.place || "not given" }),
           h("dt", { text: "Checked?" }), h("dd", { text: `${verificationText(r.verification)}${r.last_checked_at ? ` · last checked ${String(r.last_checked_at).slice(0, 10)}` : ""}` }),
           h("dt", { text: "Where it is" }), h("dd", { text: `${stage.label}: ${stage.hint}` }))),
+      ctx.research.detail(r),
       r.on_owner_list ? h("div", { class: "card" }, h("h3", { text: "Have you checked these details yourself?" }),
         h("p", { class: "muted small", text: "Details from your list start as “not checked yet”. Mark them when you have checked. An import never marks anything checked for you." }),
         h("div", { class: "chips", role: "group", "aria-label": "Checked" }, verifyBtn("unknown", "Not checked yet"), verifyBtn("unverified", "Looked at, not sure"), verifyBtn("verified", "Checked by me"))) : null,

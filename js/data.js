@@ -25,7 +25,7 @@ export async function loadCompany(orgId) {
   const execs = await select(`executions?${o}&select=id,work_item_id&order=created_at.desc&limit=300`);
   // the owner's own list, contacts, prices and this month's usage: not essential, so a failed read just leaves them empty (the screens then say so)
   const [pipe, contacts, prices, usage] = await Promise.all([
-    select(`company_pipeline?${o}&select=subject_id,name,lifecycle_stage_key,needs_review,created_at,on_owner_list,origin,verification,last_checked_at,website,place,contact_count,opted_out,stage&order=created_at.desc&limit=500`),
+    select(`company_pipeline?${o}&select=subject_id,name,lifecycle_stage_key,needs_review,created_at,on_owner_list,origin,verification,last_checked_at,website,place,contact_count,opted_out,stage,fit_label,fit_score,researched_at,needs_website&order=created_at.desc&limit=500`),
     select(`company_contacts?${o}&select=id,company_subject_id,name,email,phone,origin,opted_out_at,created_at&order=created_at.asc&limit=1000`),
     select(`provider_price_book?${o}&effective_to=is.null&select=provider_key,item_key,unit_type,unit_price,currency,effective_from`),
     rpc("usage_summary", { p_org_id: orgId, p_work_item_id: null, p_since: monthStart(), p_until: null }),
