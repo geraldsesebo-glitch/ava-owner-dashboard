@@ -63,6 +63,9 @@ export function plainReason(code) {
   if (typeof code !== "string" || code === "") return { text: "Stopped.", code: null };
   const c = code.toLowerCase();
   if (REASONS[c]) return { text: REASONS[c], code: null };
+  // a reason with the source's own explanation after a colon ("invalid_search_request:<what the source said>"): plain words first, the explanation only as small details
+  const base = c.split(":")[0];
+  if (c.includes(":") && REASONS[base]) return { text: REASONS[base], code: c.slice(0, 100) };
   if (c.startsWith("criterion_unsupported")) return { text: REASONS.criterion_unsupported, code: null };
   if (c.startsWith("preflight_")) {
     const inner = plainReason(c.slice("preflight_".length));
@@ -271,6 +274,7 @@ export function eventSentence(ev, r = NONE) {
   const forCompany = (name, fallback) => (name ? ` for ${quoted(name)}` : fallback ?? "");
   const goalWords = (id) => { const g = r.goalText(id); return g ? ` ${quoted(g)}` : ""; };
   const runCo = r.runCompany(ev?.execution_id) || r.jobCompany(d.work_item_id);
+  const searching = ev?.capability_key === "discover_prospects";   // a step of a company search, not a research job on one company
   switch (ev?.event_type) {
     case "ai_employee_provisioned":
       return ev.decision === "deny" ? { headline: true, text: "Someone tried to create an AI employee and was refused." }
@@ -340,14 +344,15 @@ export function eventSentence(ev, r = NONE) {
       return { headline: false, text: `Ava picked up the research job${forCompany(r.jobCompany(d.work_item_id))}.` };
     case "execution_run_completed": {
       const at = Number.isInteger(d.attempt_number) && d.attempt_number > 1 ? ` (attempt ${d.attempt_number})` : "";
-      return { headline: true, text: `The research job${forCompany(runCo)} finished${at}.` };
+      return { headline: true, text: searching ? `A search step finished${at}.` : `The research job${forCompany(runCo)} finished${at}.` };
     }
     case "execution_run_failed": {
       const at = Number.isInteger(d.attempt_number) && d.attempt_number > 1 ? ` (attempt ${d.attempt_number})` : "";
-      return { headline: true, text: `The research job${forCompany(runCo)} ${ev.decision === "retryable" ? "did not work and can be tried again" : "failed"}${at}.` };
+      const how = ev.decision === "retryable" ? "did not work and can be tried again" : "failed";
+      return { headline: true, text: searching ? `A search step ${how}${at}.${d.reason ? ` ${plainReason(d.reason).text}` : ""}` : `The research job${forCompany(runCo)} ${how}${at}.` };
     }
     case "execution_run_start_decision":
-      return { headline: false, text: `The research job${forCompany(runCo)} was allowed to start.` };
+      return { headline: false, text: searching ? "A search step was allowed to start." : `The research job${forCompany(runCo)} was allowed to start.` };
     case "intelligence_sufficiency_decision":
       return { headline: false, text: `Ava checked what she already knew${forCompany(runCo)} before looking something up.` };
     case "evidence_recorded":
