@@ -10,13 +10,13 @@ export function h(tag, props, ...kids) {
     else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
     else el.setAttribute(k, v === true ? "" : String(v));
   }
-  for (const kid of kids.flat(3)) {
+  for (const kid of kids.flat(Infinity)) {
     if (kid === null || kid === undefined || kid === false) continue;
     el.append(typeof kid === "object" ? kid : document.createTextNode(String(kid)));
   }
   return el;
 }
-export const fill = (el, ...kids) => el.replaceChildren(...kids.flat(3).filter((k) => k !== null && k !== undefined && k !== false));
+export const fill = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter((k) => k !== null && k !== undefined && k !== false));
 export const clip = (s, n = 120) => (typeof s === "string" ? (s.length > n ? s.slice(0, n - 1) + "…" : s) : "");
 export const word = (n, one, many) => (n === 1 ? one : many);
 /** The page forbids inline style attributes (safety rule), so the bar fill is set through the browser's style object. */

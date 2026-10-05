@@ -19,7 +19,7 @@ export async function loadCompany(orgId) {
     select(`discovery_runs?${o}&select=id,owner_objective_id,status,requested,discovered,provider_records_inspected,already_known,duplicate_in_run,rejected_outside,insufficient_evidence,malformed,provider_key,termination_reason,created_at,updated_at,finished_at&order=created_at.desc&limit=50`),
     select(`discovery_candidates?${o}&select=id,run_id,disposition,reason,identity_tier,candidate,criteria_match,created_at&order=created_at.desc&limit=400`),
     select(`work_items?${o}&select=id,status,updated_at,context&order=updated_at.desc&limit=100`),
-    select(`audit_log?${o}&select=id,event_type,decision,capability_key,execution_id,created_at,detail&order=created_at.desc&limit=200`),
+    select(`audit_log?${o}&select=id,event_type,decision,capability_key,execution_id,created_at,detail&order=created_at.desc&limit=500`),
   ]);
   // which job each logged run belonged to: only used to put a company name in a history line, so a failed read just makes those lines plainer
   const execs = await select(`executions?${o}&select=id,work_item_id&order=created_at.desc&limit=300`);

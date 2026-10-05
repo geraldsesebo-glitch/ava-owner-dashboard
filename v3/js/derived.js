@@ -113,6 +113,7 @@ export function createDerived(state) {
   function setupItems() {
     const d = state.data, f = facts(), items = [];
     const t = d.targets;
+    if (f.runningStale && f.latestRun) { const g = f.goals.find((x) => x.id === f.latestRun.owner_objective_id); if (g) items.push({ key: "stale", label: "A search did not finish", why: "Open the goal and press Try again.", go: ["home", "goals", g.id] }); }
     if (t?.ok && !(t.industries && t.geographies)) items.push({ key: "targets", label: "Choose who you target", why: "Goals cannot be confirmed until you do.", go: ["company", "targets"] });
     const k = d.knowledge;
     if (k?.ok) {

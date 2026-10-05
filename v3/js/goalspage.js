@@ -50,6 +50,7 @@ export function createGoalsPage(ctx) {
         g.status === "confirmed" ? h("p", { class: "muted", text: sent.text }) : h("p", { class: "muted", text: "Nothing starts until you confirm this goal." }),
         g.status === "confirmed" && sent.code ? h("details", { class: "d" }, h("summary", { text: "Details" }), sent.code) : null,
         msg(app.runMessage),
+        f.runningStale && f.latestRun && f.latestRun.owner_objective_id === g.id ? h("div", { class: "notice warn", role: "status" }, h("div", { text: "This search did not finish. Nothing was lost; the companies found so far are kept." }), h("button", { class: "btn sm", type: "button", disabled: !canRun, onclick: () => ctx.runSearch(g.id) }, icon("refresh", 16), "Try again")) : null,
         g.status === "confirmed" && block ? h("p", { class: "muted small", text: block }) : null,
         g.status === "confirmed" && !block && !f.runnable.some((x) => x.id === g.id) ? h("p", { class: "muted small", text: `This goal asks for more than ${REAL_RUN_MAX_GOAL} companies. For the first real searches only small goals can be searched from here.` }) : null),
       h("h2", { class: "label13", text: "Details" }),

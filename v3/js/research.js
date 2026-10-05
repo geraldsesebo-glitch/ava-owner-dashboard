@@ -18,7 +18,7 @@ export function createResearch(ctx) {
       if (st().stop) break;
       const res = await ctx.call("company-research", { org_id: app.orgId, ai_employee_id: emp.id, subject_ids: part });
       if (!res.ok || !Array.isArray(res.data?.results)) { set({ notice: { tone: "bad", text: startRefusal(res) } }); break; }
-      const lines = res.data.results.map((o) => ({ id: o.subject_id, tone: o.status === "done" ? "good" : o.status === "needs_website" ? "warn" : "bad", text: outcomeLine(o, nameOf(o.subject_id)) }));
+      const lines = res.data.results.map((o) => ({ id: o.subject_id, tone: o.status === "done" ? "good" : o.status === "needs_website" || o.status === "refused" ? "warn" : "bad", text: outcomeLine(o, nameOf(o.subject_id)) }));
       set({ done: st().done + res.data.results.length, lines: [...st().lines, ...lines] });
       // a company the platform would not allow (no permission, no price, limit reached) stops the whole run: asking again would only be refused again
       if (res.data.results.some((o) => o.status === "refused")) break;
@@ -46,7 +46,7 @@ export function createResearch(ctx) {
     if (!s.running && lines.length === 0 && !s.notice) return null;
     return h("div", { class: "card" },
       s.running ? h("p", { text: `Ava is reading… ${s.done} of ${s.total} done.` }) : h("p", { text: `Finished: ${s.done} of ${s.total}.` }),
-      s.running ? h("button", { class: "btn ghost", type: "button", disabled: s.stop, onclick: () => set({ stop: true }) }, s.stop ? "Stopping after this one…" : "Stop") : null,
+      s.running ? h("button", { class: "btn", type: "button", disabled: s.stop, onclick: () => set({ stop: true }) }, s.stop ? "Stopping after this one…" : "Stop") : null,
       note(s.notice),
       lines.length ? h("ul", { class: "plainlist" }, lines.map((l) => h("li", { class: l.tone, text: l.text }))) : null);
   }
@@ -79,5 +79,5 @@ export function createResearch(ctx) {
       progress(r.subject_id));
   }
 
-  return { strip, detail, run, progress };
+  return { strip, detail, run, progress, single: () => st().total === 1 };
 }

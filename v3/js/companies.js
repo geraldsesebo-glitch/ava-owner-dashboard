@@ -168,7 +168,7 @@ export function createCompanies(ctx) {
             h("button", { type: "button", "aria-pressed": String(ui.layout === "board"), onclick: () => { ui.layout = "board"; ctx.render(); } }, icon("board", 16), "Board")),
           h("button", { class: "btn desk-only", type: "button", title: "Import your list", onclick: () => ctx.go("companies", "import") }, icon("upload", 16), h("span", { class: "lbl", text: "Import your list" })),
           h("button", { class: "btn desk-only", type: "button", title: "Download as CSV", disabled: list.filter((r) => r.kind === "company").length === 0, onclick: () => download(list) }, icon("download", 16), h("span", { class: "lbl", text: "Download as CSV" }))),
-        chipView, fitChips, research.progress(),
+        chipView, fitChips, ui.selected && research.single() ? null : research.progress(),
         ui.layout === "board" ? boardView(list) : listView(list)),
       open ? drawer() : null);
   }

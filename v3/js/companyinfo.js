@@ -16,7 +16,7 @@ export function createCompanyInfo(ctx) {
     if (!st()) return;
     set(r.ok ? { loaded: true, failed: false, k: shapeKnowledge(r.rows, r.versions) } : { loaded: true, failed: true });
   }
-  function open() { app.ci = fresh(); ctx.go("companyinfo"); load(); }
+  function open() { app.ci = fresh(); ctx.go("company", "info"); }
 
   async function save(slot, item, value, label) {
     if (st().working) return;
@@ -49,7 +49,7 @@ export function createCompanyInfo(ctx) {
       ? h("textarea", { rows, maxlength: max, class: "listbox", "aria-label": title, oninput: (e) => { st().drafts[slot] = e.target.value; refreshSave(slot); } }, cur)
       : h("input", { type: "text", maxlength: max, class: "pick", "aria-label": title, value: cur, oninput: (e) => { st().drafts[slot] = e.target.value; refreshSave(slot); } });
     return h("div", { class: "card" }, h("h3", { text: title }), h("p", { class: "muted small", text: help }), input, stamp(info),
-      h("button", { class: "btn primary block", type: "button", "data-save": slot, disabled: !!s.working || empty || unchanged, onclick: () => save(slot, null, toValue(st().drafts[slot] ?? saved), title) }, icon("check", 20), s.working === slot ? "Saving…" : "Save and approve"));
+      h("button", { class: "btn", type: "button", "data-save": slot, disabled: !!s.working || empty || unchanged, onclick: () => save(slot, null, toValue(st().drafts[slot] ?? saved), title) }, icon("check", 16), s.working === slot ? "Saving…" : "Save and approve"));
   }
   /** Keeps the Save button in step with what is typed, without re-drawing the page (so the cursor stays put). */
   function refreshSave(slot) {
@@ -58,6 +58,7 @@ export function createCompanyInfo(ctx) {
     const spec = SPECS[slot], info = st().k?.single?.[slot] ?? null, saved = info ? spec.fromValue(info.value) : "", cur = st().drafts[slot] ?? saved;
     const v = spec.toValue(cur);
     b.disabled = !!st().working || cur === saved || v === "" || (Array.isArray(v) && v.length === 0);
+    b.classList.toggle("primary", !b.disabled);
   }
 
   const SPECS = {
@@ -78,19 +79,27 @@ export function createCompanyInfo(ctx) {
         ? h("div", { class: "card inner" },
           h("label", { class: "field" }, "Name", h("input", { type: "text", class: "pick", maxlength: 200, value: add.name, oninput: (e) => { add.name = e.target.value; } })),
           h("label", { class: "field" }, "What it is, in a sentence or two", h("textarea", { rows: 3, maxlength: 2000, class: "listbox", oninput: (e) => { add.description = e.target.value; } }, add.description)),
-          h("button", { class: "btn primary block", type: "button", disabled: !!s.working, onclick: () => {
+          h("button", { class: "btn primary", type: "button", disabled: !!s.working, onclick: () => {
             const name = add.name.trim(), description = add.description.trim();
             if (!name || !description) { set({ notice: { tone: "bad", text: "Give the product or service a name and a short description." } }); return; }
             save("offering", newItemKey(name, items.map((x) => x.item_key)), { name, description }, name);
-          } }, icon("check", 20), "Save and approve"),
-          h("button", { class: "btn ghost block", type: "button", onclick: () => set({ adding: null }) }, "Cancel"))
-        : h("button", { class: "btn ghost block", type: "button", onclick: () => set({ adding: { name: "", description: "" } }) }, icon("plus", 18), "Add a product or service"));
+          } }, icon("check", 16), "Save and approve"),
+          h("button", { class: "btn", type: "button", onclick: () => set({ adding: null }) }, "Cancel"))
+        : h("button", { class: "btn", type: "button", onclick: () => set({ adding: { name: "", description: "" } }) }, icon("plus", 16), "Add a product or service"));
+  }
+
+  /** A short summary of who you target (read from what the platform holds), with a way to change it. */
+  function whoCard() {
+    const t = app.data?.targets, both = t?.ok && t.industries && t.geographies;
+    return h("div", { class: "card" }, h("div", { class: "row2" }, h("h3", { text: "Who you target" }), t?.ok ? h("span", { class: `tag ${both ? "good" : "warn"}`, text: both ? "Set" : "Not set yet" }) : null),
+      t?.ok ? h("p", { class: "muted", text: both ? `Kinds of company: ${t.industries.values.join(", ")}. Places: ${t.geographies.values.join(", ")}.` : "Goals cannot be confirmed until you choose the kinds of company and the places Ava may search." }) : h("p", { class: "muted", text: "Could not read this just now." }),
+      h("button", { class: "btn", type: "button", onclick: () => ctx.openTargets() }, both ? "Change who you target" : "Choose who you target"));
   }
 
   function render() {
     const s = st() ?? (app.ci = fresh());
+    if (!s.loaded && !s.began) { s.began = true; queueMicrotask(load); }
     return [
-      h("button", { class: "back always", type: "button", onclick: () => ctx.go("home") }, icon("back", 18), "Home"),
       h("h1", { class: "page-title", text: "Company information" }),
       h("p", { class: "mainnote", text: "What Ava knows about your company. Only you, the owner, can change it. Each save is kept as a new approved version." }),
       note(s.notice),
@@ -100,7 +109,7 @@ export function createCompanyInfo(ctx) {
         offeringsCard(),
         textCard("target_company_sizes", SPECS.target_company_sizes.title, SPECS.target_company_sizes.help, SPECS.target_company_sizes),
         textCard("sales_note", SPECS.sales_note.title, SPECS.sales_note.help, SPECS.sales_note),
-        h("div", { class: "card" }, h("h3", { text: "Who you target" }), h("p", { class: "muted small", text: "The kinds of company and places Ava may search." }), h("button", { class: "btn ghost block", type: "button", onclick: () => ctx.openTargets() }, "Open “Who you target”")),
+        whoCard(),
       ],
     ];
   }

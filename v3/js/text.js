@@ -8,9 +8,9 @@ export function companyKind(name) {
 
 const REASONS = {
   source_exhausted: "Ava went through everything the search source had.",
-  org_suspended: "The company is paused (Emergency stop is on).",
-  organization_suspended: "The company is paused (Emergency stop is on).",
-  preflight_organization_suspended: "The company is paused (Emergency stop is on).",
+  org_suspended: "The company is paused (Ava is paused).",
+  organization_suspended: "The company is paused (Ava is paused).",
+  preflight_organization_suspended: "The company is paused (Ava is paused).",
   page_attempt_limit_reached: "A safety limit was reached, so the search stopped.",
   page_retry_limit_reached: "A search step kept failing, so the search stopped.",
   safety_ceiling_reached: "A safety limit was reached, so the search stopped.",
@@ -284,7 +284,7 @@ export function eventSentence(ev, r = NONE) {
       return ev.decision === "deny" ? { headline: true, text: "Someone tried to create an AI employee and was refused." }
         : { headline: true, text: `${typeof d.name === "string" && tidy(d.name, 40) ? tidy(d.name, 40) : "An AI employee"} was created.` };
     case "organization_status_changed":
-      return { headline: true, text: d.to === "suspended" ? "Emergency stop was switched ON. Ava stopped working." : "Emergency stop was switched OFF. Ava can work again." };
+      return { headline: true, text: d.to === "suspended" ? "Ava was paused. Nothing is running." : "Ava was resumed and can work again." };
     case "owner_objective_proposed":
     case "owner_objective_created":
     case "objective_created": {
@@ -436,7 +436,7 @@ export function timeAgo(iso, nowMs = Date.now()) {
 /** The big status on Home: one of stopped | searching | waiting | working | resting, with a plain line. */
 export function homeStatus({ org, employee, latestRun, runningStale, activeJobs }) {
   if (org && org.status === "suspended") {
-    return { key: "stopped", title: "Stopped", line: "Emergency stop is ON. Ava will not do anything until you resume." };
+    return { key: "stopped", title: "Stopped", line: "Ava is paused. Nothing is running until you resume." };
   }
   if (!employee) return { key: "resting", title: "No AI employee yet", line: "There is no AI employee in this company." };
   if (employee.status !== "active") return { key: "stopped", title: "Ava is switched off", line: `${employee.name} is not active.` };
