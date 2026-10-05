@@ -1,6 +1,7 @@
 // One company from the Pipeline: where it came from, what you supplied, its contacts, and the owner-only controls (mark checked / do-not-contact).
 // Uses ONLY the owner-only functions public.set_company_verification and public.mark_opt_out. There is deliberately no button here that clears a do-not-contact mark.
 import { STAGES, originText, verificationText } from "./pipeline-logic.js";
+import { kindWords, statusWords } from "./outreach-logic.js";
 
 export function createCompanyDetail(ctx) {
   const { h, icon, state: app } = ctx;
@@ -42,6 +43,10 @@ export function createCompanyDetail(ctx) {
           h("dt", { text: "Checked?" }), h("dd", { text: `${verificationText(r.verification)}${r.last_checked_at ? ` · last checked ${String(r.last_checked_at).slice(0, 10)}` : ""}` }),
           h("dt", { text: "Where it is" }), h("dd", { text: `${stage.label}: ${stage.hint}` }))),
       ctx.research.detail(r),
+      (app.data.drafts ?? []).some((d) => d.subject_id === r.subject_id)
+        ? h("div", { class: "card" }, h("h3", { text: "Messages" }),
+          h("ul", { class: "plainlist" }, (app.data.drafts ?? []).filter((d) => d.subject_id === r.subject_id).map((d) => h("li", { text: `${kindWords(d.kind)} · ${statusWords(d.status)} · “${d.subject_line}”` }))),
+          h("button", { class: "textbtn", type: "button", onclick: () => ctx.openApprove() }, "Go to Approve")) : null,
       r.on_owner_list ? h("div", { class: "card" }, h("h3", { text: "Have you checked these details yourself?" }),
         h("p", { class: "muted small", text: "Details from your list start as “not checked yet”. Mark them when you have checked. An import never marks anything checked for you." }),
         h("div", { class: "chips", role: "group", "aria-label": "Checked" }, verifyBtn("unknown", "Not checked yet"), verifyBtn("unverified", "Looked at, not sure"), verifyBtn("verified", "Checked by me"))) : null,

@@ -217,6 +217,7 @@ export function goalCriteriaLine(criteria) {
 const WORK_TO = { completed: "finished", failed: "failed", active: "started", queued: "waiting to start", paused: "paused", needs_human: "waiting for you", cancelled: "cancelled" };
 const WORK_FROM = { completed: "finished", failed: "failed", active: "running", queued: "waiting to start", paused: "paused", needs_human: "waiting for you", cancelled: "cancelled" };
 const CLOSED_BECAUSE = { company_not_found: "the data service had no record of the company" };
+const CATEGORY_WORDS = { interested: "Interested", not_now: "Not now", not_interested: "Not interested", question: "Has a question", unsubscribe: "Asked not to be contacted" };
 const SLOT_LABEL = { target_industries: "the kinds of company you target", target_geographies: "the places you target" };
 
 /** A name that came from the database: plain text only, no control characters, never long. Returns "" if there is nothing usable. */
@@ -236,12 +237,13 @@ const isId = (v) => typeof v === "string" && v.length > 0 && v.length <= 64;
  *   goals:      the company's goals { id, source_goal_text, quantity }
  *   runs:       searches           { id, owner_objective_id }
  */
-export function makeResolver({ jobs, executions, goals, runs } = {}) {
+export function makeResolver({ jobs, executions, goals, runs, companies } = {}) {
   const arr = (x) => (Array.isArray(x) ? x : []);
   const jobById = new Map(arr(jobs).filter((j) => j && isId(j.id)).map((j) => [j.id, j]));
   const jobOfRun = new Map(arr(executions).filter((e) => e && isId(e.id) && isId(e.work_item_id)).map((e) => [e.id, e.work_item_id]));
   const goalById = new Map(arr(goals).filter((g) => g && isId(g.id)).map((g) => [g.id, g]));
   const goalOfSearch = new Map(arr(runs).filter((r) => r && isId(r.id) && isId(r.owner_objective_id)).map((r) => [r.id, r.owner_objective_id]));
+  const coById = new Map(arr(companies).filter((c) => c && isId(c.subject_id)).map((c) => [c.subject_id, c]));
   const company = (workItemId) => {
     const j = isId(workItemId) ? jobById.get(workItemId) : null;
     const c = j && j.context && typeof j.context === "object" ? j.context : null;
@@ -250,6 +252,8 @@ export function makeResolver({ jobs, executions, goals, runs } = {}) {
   return {
     /** The company a job is about, or "". */
     jobCompany: company,
+    /** A company's name from its id (the owner's pipeline), or "". */
+    subjectName: (subjectId) => (isId(subjectId) ? tidy(coById.get(subjectId)?.name) : ""),
     /** The job a logged run belonged to -> its company, or "". */
     runCompany: (executionId) => (isId(executionId) ? company(jobOfRun.get(executionId)) : ""),
     jobReason: (workItemId) => {
@@ -363,6 +367,34 @@ export function eventSentence(ev, r = NONE) {
       const n = tidy(d.canonical_name);
       return { headline: false, text: n ? `Ava added ${quoted(n)} to the companies she knows.` : "Ava added a company to the companies she knows." };
     }
+    case "outreach_draft_created": {
+      const n = r.subjectName(d.subject_id), what = d.kind === "follow_up" ? "a follow-up" : d.kind === "reply" ? "a reply" : "a first email";
+      return { headline: true, text: `Ava wrote ${what}${forCompany(n)}. It is waiting for you to approve.` };
+    }
+    case "outreach_draft_edited":
+      return { headline: true, text: `You changed a message${forCompany(r.subjectName(d.subject_id))}.` };
+    case "outreach_draft_approved":
+      return { headline: true, text: `You approved a message${forCompany(r.subjectName(d.subject_id))}. It had not been sent yet.` };
+    case "outreach_draft_rejected":
+      return { headline: true, text: `A message${forCompany(r.subjectName(d.subject_id))} was rejected. Nothing was sent.` };
+    case "outreach_sent":
+      return { headline: true, text: `A TEST message${forCompany(r.subjectName(d.subject_id))} was sent to your test inbox. Nobody real was contacted.` };
+    case "outreach_send_failed":
+      return { headline: true, text: `A TEST message${forCompany(r.subjectName(d.subject_id))} could not be sent. It is back on the Approve screen.` };
+    case "reply_recorded":
+      return { headline: true, text: `${d.simulated === true ? "A simulated reply" : "A reply"}${forCompany(r.subjectName(d.subject_id))} was recorded.` };
+    case "reply_categorized": {
+      const how = d.source === "ai" ? "Ava sorted" : d.source === "rule" ? "A rule sorted" : "You sorted";
+      return { headline: true, text: `${how} a reply${forCompany(r.subjectName(d.subject_id))} as “${CATEGORY_WORDS[d.category] ?? "another kind"}”.` };
+    }
+    case "opt_out_from_reply":
+      return { headline: true, text: `${r.subjectName(d.subject_id) ? quoted(r.subjectName(d.subject_id)) : "A company"} asked not to be contacted. It is now marked do-not-contact and anything waiting for it was cancelled.` };
+    case "opt_out_marked":
+      return { headline: true, text: "You marked a company or a person as do-not-contact." };
+    case "company_research_completed":
+      return { headline: true, text: `Ava read a company's website and judged how well it fits${forCompany(r.subjectName(d.subject_id))}: ${d.label ?? "done"}. Not verified.` };
+    case "approval_decision":
+      return { headline: false, text: ev.decision === "approved" ? "A request was approved by you." : "A request was turned down by you." };
     case "ai_authority_set":
       return { headline: true, text: `Permission for Ava “${capabilityLabel(ev.capability_key)}” was switched ${d.enabled === true ? "on" : "off"}.` };
     case "knowledge_version_confirmed":

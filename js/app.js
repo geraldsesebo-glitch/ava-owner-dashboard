@@ -17,6 +17,10 @@ import { createTemplates } from "./templates.js";
 import { createPipeline } from "./pipeline.js";
 import { createCompanyDetail } from "./companydetail.js";
 import { createResearch } from "./research.js";
+import { createApprove } from "./approve.js";
+import { createOutreach } from "./outreach.js";
+import { createInbox } from "./inbox.js";
+import { byStatus } from "./outreach-logic.js";
 import { usageLines } from "./cost-logic.js";
 import { STAGES } from "./pipeline-logic.js";
 
@@ -30,8 +34,8 @@ const SECTIONS = [
   { id: "home", label: "Home", icon: "home", built: true },
   { id: "goals", label: "Goals", icon: "goals", built: true },
   { id: "companies", label: "Companies", icon: "companies", built: true },
-  { id: "outreach", label: "Outreach", icon: "outreach", built: false },
-  { id: "inbox", label: "Inbox", icon: "inbox", built: false },
+  { id: "outreach", label: "Outreach", icon: "outreach", built: true },
+  { id: "inbox", label: "Inbox", icon: "inbox", built: true },
   { id: "pipeline", label: "Pipeline", icon: "pipeline", built: true },
   { id: "history", label: "History", icon: "history", built: true },
   { id: "addgoal", label: "Add goal", icon: "plus", built: true, hidden: true },
@@ -43,6 +47,7 @@ const SECTIONS = [
   { id: "templates", label: "Message templates", icon: "outreach", built: true, hidden: true },
   { id: "costs", label: "What things cost", icon: "check", built: true, hidden: true },
   { id: "company", label: "Company", icon: "companies", built: true, hidden: true },
+  { id: "approve", label: "Approve", icon: "check", built: true, hidden: true },
 ];
 const SOON = {
   outreach: "Ava will write first messages to the companies she found, and wait for your OK before anything is sent.",
@@ -50,7 +55,7 @@ const SOON = {
 };
 const TABS = ["home", "goals", "companies", "history", "more"];
 
-const state = { companies: [], orgId: null, data: null, section: "home", itemId: null, filter: "found", historyAll: false, query: "", busy: false, runMessage: null, sheet: null, theme: loadTheme(), loadId: 0, loadError: null, addGoal: null, targets: null, perm: null, pt: null, imp: null, ci: null, tpl: null, costs: null, pipe: null, co: null };
+const state = { companies: [], orgId: null, data: null, section: "home", itemId: null, filter: "found", historyAll: false, query: "", busy: false, runMessage: null, sheet: null, theme: loadTheme(), loadId: 0, loadError: null, addGoal: null, targets: null, perm: null, pt: null, imp: null, ci: null, tpl: null, costs: null, pipe: null, co: null, ap: null, ib: null };
 // the Add goal screen (uses only the existing goal reader and its confirm step)
 const addGoal = createAddGoal({ h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), call: callHelper, openTargets: () => targets.open() });
 // the "Who you target" screen (uses only the existing owner-only set_knowledge path)
@@ -61,7 +66,7 @@ const permissions = createPermissions({ h, icon, state, render: () => render(), 
 const providerTest = createProviderTest({ h, icon, state, render: () => render(), go: (s, i) => go(s, i), call: callHelper });
 
 // the screens added for the thin end-to-end loop (each uses only owner-only platform functions; see the file headers)
-const loopCtx = { h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), rpc, openTargets: () => targets.open(), openCompany: (id) => company.open(id), openImport: () => importer.open(), call: callHelper, select };
+const loopCtx = { h, icon, state, render: () => render(), reload: (keep) => reload(keep), go: (s, i) => go(s, i), rpc, openTargets: () => targets.open(), openCompany: (id) => company.open(id), openImport: () => importer.open(), openPermissions: () => permissions.open(), openApprove: () => approve.open(), call: callHelper, select };
 const research = createResearch(loopCtx);
 loopCtx.research = research;
 const costs = createCosts(loopCtx);
@@ -70,12 +75,15 @@ const companyInfo = createCompanyInfo(loopCtx);
 const templates = createTemplates(loopCtx);
 const pipeline = createPipeline(loopCtx);
 const company = createCompanyDetail(loopCtx);
-const SCREENS = { import: importer, companyinfo: companyInfo, templates, costs, pipeline, company };
+const approve = createApprove(loopCtx);
+const outreach = createOutreach(loopCtx);
+const inbox = createInbox(loopCtx);
+const SCREENS = { import: importer, companyinfo: companyInfo, templates, costs, pipeline, company, approve, outreach, inbox };
 /** Hidden screens and the state each one keeps (cleared when you leave it), and which list the left column shows beside it. */
-const SCREEN_STATE = { addgoal: "addGoal", targets: "targets", permissions: "perm", providertest: "pt", import: "imp", companyinfo: "ci", templates: "tpl", costs: "costs", pipeline: "pipe", company: "co" };
-const FULL = new Set(["home", "addgoal", "targets", "permissions", "providertest", "import", "companyinfo", "templates", "costs", "pipeline", "company"]);
-const LIST_FOR = { addgoal: "goals", targets: "goals", permissions: "goals", providertest: "goals", import: "companies", company: "pipeline", companyinfo: "home", templates: "home", costs: "home" };
-const FORMS = new Set(["import", "companyinfo", "templates", "costs", "addgoal", "targets"]);
+const SCREEN_STATE = { addgoal: "addGoal", targets: "targets", permissions: "perm", providertest: "pt", import: "imp", companyinfo: "ci", templates: "tpl", costs: "costs", pipeline: "pipe", company: "co", approve: "ap", inbox: "ib" };
+const FULL = new Set(["home", "addgoal", "targets", "permissions", "providertest", "import", "companyinfo", "templates", "costs", "pipeline", "company", "approve", "outreach", "inbox"]);
+const LIST_FOR = { addgoal: "goals", targets: "goals", permissions: "goals", providertest: "goals", import: "companies", company: "pipeline", companyinfo: "home", templates: "home", costs: "home", approve: "home", outreach: "home", inbox: "home" };
+const FORMS = new Set(["import", "companyinfo", "templates", "costs", "addgoal", "targets", "approve", "inbox"]);
 
 // ---- small helpers ------------------------------------------------------------------------------------------------------------------------
 function h(tag, props, ...kids) {
@@ -144,7 +152,7 @@ function runBlock(f) {
   return null;
 }
 // each line can name its company or goal, using only what is already loaded (see makeResolver)
-const describe = (ev) => { const d = state.data; if (d && d.resolver === undefined) d.resolver = makeResolver({ jobs: d.jobs, executions: d.executions, goals: d.goals, runs: d.runs }); return eventSentence(ev, d?.resolver); };
+const describe = (ev) => { const d = state.data; if (d && d.resolver === undefined) d.resolver = makeResolver({ jobs: d.jobs, executions: d.executions, goals: d.goals, runs: d.runs, companies: d.pipeline }); return eventSentence(ev, d?.resolver); };
 const headlineEvents = () => state.data.audit.map((ev) => ({ ev, s: describe(ev) })).filter((x) => x.s.headline);
 function companyGroups() {
   const d = state.data, latest = d.runs[0]?.id;
@@ -368,7 +376,7 @@ function renderHome() {
     h("div", { class: "card" }, h("div", { class: "tiles" },
       tile("Run search", "run", () => runSearch(target()), { disabled: !!block || state.busy }),
       tile("Add goal", "plus", () => addGoal.open(), { disabled: state.busy }),
-      tile("Approve", "check", () => openSoon("Approve"), { soon: true }),
+      tile(byStatus(state.data.drafts, "waiting").length ? `Approve (${byStatus(state.data.drafts, "waiting").length})` : "Approve", "check", () => approve.open(), { disabled: state.busy }),
       tile(stopped ? "Resume" : "Emergency stop", stopped ? "run" : "stop", stopped ? () => { state.sheet = { kind: "resume" }; render(); } : () => setStop(true), { danger: !stopped, disabled: state.busy })),
       block ? h("p", { class: "muted small", text: block }) : null),
     messageBox(state.runMessage),
@@ -528,7 +536,7 @@ async function reload(keepMessage = false) {
 async function refreshNow() { await reload(true); render(); }
 
 // ---- sign in / out ------------------------------------------------------------------------------------------------------------------------
-function showSignIn() { $("app").hidden = true; $("sheet-root").replaceChildren(); $("signin").hidden = false; Object.assign(state, { data: null, companies: [], orgId: null, sheet: null, loadError: null, runMessage: null, itemId: null, section: "home", addGoal: null, targets: null, perm: null, pt: null, imp: null, ci: null, tpl: null, costs: null, pipe: null, co: null }); $("password").value = ""; }
+function showSignIn() { $("app").hidden = true; $("sheet-root").replaceChildren(); $("signin").hidden = false; Object.assign(state, { data: null, companies: [], orgId: null, sheet: null, loadError: null, runMessage: null, itemId: null, section: "home", addGoal: null, targets: null, perm: null, pt: null, imp: null, ci: null, tpl: null, costs: null, pipe: null, co: null, ap: null, ib: null }); $("password").value = ""; }
 async function showApp() { $("signin").hidden = true; $("app").hidden = false; render(); await reload(); render(); }
 
 $("signin-form").addEventListener("submit", async (e) => {

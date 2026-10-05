@@ -24,11 +24,15 @@ export async function loadCompany(orgId) {
   // which job each logged run belonged to: only used to put a company name in a history line, so a failed read just makes those lines plainer
   const execs = await select(`executions?${o}&select=id,work_item_id&order=created_at.desc&limit=300`);
   // the owner's own list, contacts, prices and this month's usage: not essential, so a failed read just leaves them empty (the screens then say so)
-  const [pipe, contacts, prices, usage] = await Promise.all([
+  const [pipe, contacts, prices, usage, drafts, followups, assessments, records] = await Promise.all([
     select(`company_pipeline?${o}&select=subject_id,name,lifecycle_stage_key,needs_review,created_at,on_owner_list,origin,verification,last_checked_at,website,place,contact_count,opted_out,stage,fit_label,fit_score,researched_at,needs_website&order=created_at.desc&limit=500`),
     select(`company_contacts?${o}&select=id,company_subject_id,name,email,phone,origin,opted_out_at,created_at&order=created_at.asc&limit=1000`),
     select(`provider_price_book?${o}&effective_to=is.null&select=provider_key,item_key,unit_type,unit_price,currency,effective_from`),
     rpc("usage_summary", { p_org_id: orgId, p_work_item_id: null, p_since: monthStart(), p_until: null }),
+    select(`outreach_drafts?${o}&select=id,subject_id,contact_id,kind,reply_to_record_id,subject_line,body,original_subject,original_body,edited,status,reason_used,send_error,decided_note,sent_at,created_at&order=created_at.desc&limit=300`),
+    select(`outreach_followups?${o}&select=id,subject_id,source_draft_id,due_at,status,cancel_reason,draft_id&order=due_at.asc&limit=300`),
+    select(`reply_assessments?${o}&select=id,subject_id,record_id,category,source,created_at&order=created_at.desc&limit=500`),
+    select(`conversation_records?${o}&select=id,subject_id,direction,delivery_status,content,channel_identity,occurred_at&order=occurred_at.desc&limit=300`),
   ]);
   const all = [emps, auths, goals, runs, cands, jobs, audit];
   if (all.some((r) => !r.ok || !Array.isArray(r.data))) return { ok: false, status: all.find((r) => !r.ok)?.status };
@@ -37,6 +41,8 @@ export async function loadCompany(orgId) {
     employees: emps.data, authorities: auths.data, goals: goals.data, runs: runs.data, candidates: cands.data, jobs: jobs.data, audit: audit.data, executions: execs.ok && Array.isArray(execs.data) ? execs.data : [],
     pipeline: pipe.ok && Array.isArray(pipe.data) ? pipe.data : [], contacts: contacts.ok && Array.isArray(contacts.data) ? contacts.data : [],
     prices: prices.ok && Array.isArray(prices.data) ? prices.data : [], usage: usage.ok && Array.isArray(usage.data) ? usage.data : [],
+    drafts: drafts.ok && Array.isArray(drafts.data) ? drafts.data : [], followups: followups.ok && Array.isArray(followups.data) ? followups.data : [],
+    assessments: assessments.ok && Array.isArray(assessments.data) ? assessments.data : [], records: records.ok && Array.isArray(records.data) ? records.data : [],
     loadedAt: Date.now(),
   };
 }

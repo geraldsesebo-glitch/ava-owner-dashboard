@@ -1,12 +1,12 @@
 // The "What Ava may do" screen. It uses ONLY the existing owner-only permission function (public.set_ai_authority), which the platform itself restricts to
 // the company owner, checks against the plan, and writes to the history. The dashboard never switches anything on by itself: the only thing that ever
 // changes a permission is the owner's own "Yes" on the confirm card. Allowing a search does NOT start one.
-import { PERMISSIONS, SEARCH_KEY, FIT_KEY, FIT_NOTE, NO_SEARCH_NOTE, permissionState, stateText, stateTone, rpcArgs, confirmCopy, refusalText } from "./permissions-logic.js";
+import { PERMISSIONS, SEARCH_KEY, FIT_KEY, FIT_NOTE, ASK_KEYS, ASK_NOTE, NO_SEARCH_NOTE, permissionState, stateText, stateTone, rpcArgs, confirmCopy, refusalText } from "./permissions-logic.js";
 
 export function createPermissions(ctx) {
   const { h, icon, state: app } = ctx;
   const pm = () => app.perm;
-  const set = (patch) => { Object.assign(pm(), patch); ctx.render(); };
+  const set = (patch) => { if (!pm()) return; Object.assign(pm(), patch); ctx.render(); };   // the owner may leave the screen while a save is finishing
   const employee = () => (app.data ? app.data.employees.find((e) => e.status === "active") || app.data.employees[0] || null : null);
   const companyName = () => app.companies.find((c) => c.id === app.orgId)?.name ?? "this company";
 
@@ -26,7 +26,7 @@ export function createPermissions(ctx) {
     if (!res.ok) { const r = refusalText(res); set({ working: false, asking: null, notice: { tone: "bad", text: r.text, code: r.detail } }); return; }
     await ctx.reload(true);
     const changed = Array.isArray(res.data) ? res.data[0]?.changed !== false : true;
-    set({ working: false, asking: null, notice: { tone: "good", text: !changed ? "It was already set that way, so nothing changed." : key === FIT_KEY ? (on ? `Done. ${emp.name} may now judge whether companies fit. No research was started.` : `Done. ${emp.name} can no longer judge whether companies fit.`) : on ? `Done. ${emp.name} may now search for new companies. No search was started.` : `Done. ${emp.name} can no longer search for new companies.` } });
+    set({ working: false, asking: null, notice: { tone: "good", text: !changed ? "It was already set that way, so nothing changed." : ASK_KEYS.has(key) ? (on ? `Done. ${emp.name} may now write messages for you to approve. Nothing was written or sent.` : `Done. ${emp.name} can no longer write messages to companies.`) : key === FIT_KEY ? (on ? `Done. ${emp.name} may now judge whether companies fit. No research was started.` : `Done. ${emp.name} can no longer judge whether companies fit.`) : on ? `Done. ${emp.name} may now search for new companies. No search was started.` : `Done. ${emp.name} can no longer search for new companies.` } });
   }
 
   const note = (n) => (n ? h("div", { class: `notice ${n.tone}`, role: "status" }, n.text, n.code ? h("details", { class: "d" }, h("summary", { text: "Details" }), n.code) : null) : null);
@@ -46,7 +46,7 @@ export function createPermissions(ctx) {
     const busy = pm().working;
     return h("div", { class: "card ask", role: "alertdialog", "aria-labelledby": "perm-ask-title" },
       h("h3", { id: "perm-ask-title", text: copy.title }), h("p", { text: copy.body }),
-      a.on ? h("div", { class: "notice warn", text: a.key === FIT_KEY ? FIT_NOTE : NO_SEARCH_NOTE }) : null,
+      a.on ? h("div", { class: "notice warn", text: ASK_KEYS.has(a.key) ? ASK_NOTE : a.key === FIT_KEY ? FIT_NOTE : NO_SEARCH_NOTE }) : null,
       h("button", { class: "btn primary block bigbtn", type: "button", disabled: busy, onclick: confirm }, icon("check", 20), busy ? "Saving…" : copy.yes),
       h("button", { class: "btn ghost block", type: "button", disabled: busy, onclick: () => set({ asking: null }) }, copy.no));
   }

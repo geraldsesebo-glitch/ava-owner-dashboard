@@ -35,3 +35,12 @@
 .plainlist li.good { border-color: var(--good, #2e7d32); }
 .plainlist li.bad { border-color: var(--bad, #c62828); }
 .plainlist li.warn { border-color: var(--warn, #b26a00); }
+
+/* chapters 5 to 7: Approve, Outreach, Inbox */
+.sectitle { margin: 18px 0 8px; font-size: 1.05rem; }
+.draft .msg { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; background: var(--bg); }
+.draft .msg-subject { font-weight: 700; overflow-wrap: anywhere; margin-bottom: 6px; }
+.draft .msg-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.kv2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; margin-bottom: 10px; }
+.big2 { font-size: 1.6rem; font-weight: 700; }
