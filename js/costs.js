@@ -9,7 +9,7 @@ export function createCosts(ctx) {
   const fresh = () => ({ drafts: {}, asking: null, working: false, notice: null });
   const companyName = () => app.companies.find((c) => c.id === app.orgId)?.name ?? "this company";
 
-  function open() { app.costs = fresh(); ctx.go("costs"); }
+  function open() { app.costs = fresh(); ctx.go("settings", "costs"); }
 
   function ask(state) {
     const text = st().drafts[state.line.id] ?? "";
@@ -45,17 +45,16 @@ export function createCosts(ctx) {
       asking
         ? h("div", { class: "card ask inner", role: "alertdialog" },
           h("p", { text: `Save ${money(s.asking.value)} per ${line.per} for “${line.label}” in ${companyName()}?` }),
-          h("button", { class: "btn primary block bigbtn", type: "button", disabled: busy, onclick: save }, icon("check", 20), busy ? "Saving…" : "Yes, save this price"),
-          h("button", { class: "btn ghost block", type: "button", disabled: busy, onclick: () => set({ asking: null }) }, "Not now"))
-        : h("button", { class: "btn ghost block", type: "button", disabled: busy, onclick: () => ask(state) }, state.current === null ? "Set this price" : "Change this price"));
+          h("button", { class: "btn primary", type: "button", disabled: busy, onclick: save }, icon("check", 16), busy ? "Saving…" : "Yes, save this price"),
+          h("button", { class: "btn", type: "button", disabled: busy, onclick: () => set({ asking: null }) }, "Not now"))
+        : h("button", { class: "btn", type: "button", disabled: busy, onclick: () => ask(state) }, state.current === null ? "Set this price" : "Change this price"));
   }
 
   function render() {
     const s = st() ?? (app.costs = fresh());
     const states = lineStates(app.data?.prices);
     return [
-      h("button", { class: "back always", type: "button", onclick: () => ctx.go("home") }, icon("back", 18), "Home"),
-      h("h1", { class: "page-title", text: "What things cost" }),
+      h("h2", { class: "label13", text: "Prices" }),
       h("p", { class: "mainnote", text: `The prices Ava uses to show what ${companyName()} spends. Only you, the owner, can change them. Nothing here is guessed: until a price is set, the cost shows as “price not set”.` }),
       note(s.notice),
       states.map(lineCard),

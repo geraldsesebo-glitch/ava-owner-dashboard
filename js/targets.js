@@ -14,9 +14,12 @@ export function createTargets(ctx) {
   const current = () => app.data?.targets ?? { ok: false };
 
   /** Open the screen with today's choice ticked. */
-  async function open() {
+  function open() {
     app.targets = { phase: "loading", notice: null, done: null };
-    ctx.go("targets");
+    ctx.go("company", "targets");
+  }
+  /** Reads the platform list and shows the choice; started by the first drawing of the screen (so a direct link works too). */
+  async function begin() {
     if (!vocabularyCache) vocabularyCache = await loadVocabulary();
     if (!vocabularyCache || !vocabularyCache.length) { set({ phase: "error", notice: { tone: "bad", text: "Could not load the platform's list. Check your connection and try again." } }); return; }
     const ind = buildTree(vocabularyCache, "industry"), geo = buildTree(vocabularyCache, "geography");
@@ -74,7 +77,7 @@ export function createTargets(ctx) {
 
   function editor() {
     const t = tg();
-    const summary = h("div", { class: "card" }), button = h("button", { class: "btn primary block bigbtn", type: "button", onclick: save }, icon("check", 20), "Confirm who you target");
+    const summary = h("div", { class: "card" }), button = h("button", { class: "btn primary", type: "button", onclick: save }, icon("check", 16), "Confirm who you target");
     const why = h("p", { class: "muted small" });
     const refresh = () => {
       const kinds = labelsOf(t.ind, t.selInd), places = labelsOf(t.geo, t.selGeo);
@@ -94,7 +97,7 @@ export function createTargets(ctx) {
       nowCard(),
       t.unknown.length ? h("div", { class: "notice warn", text: `Set today but not on the platform's list: ${t.unknown.join(", ")}. It will not be kept unless you pick something from the list.` }) : null,
       h("div", { class: "card" }, h("h3", { id: "kinds-title", text: "Kinds of company" }), h("p", { class: "muted small", text: "Tick every kind of company Ava may search for." }), ind.wrap),
-      h("div", { class: "card" }, h("h3", { id: "places-title", text: "Places" }), h("p", { class: "muted small", text: "Tick every place Ava may search in. A country includes all its states." }), h("label", { class: "searchbox inline" }, icon("search", 18), search), geo.wrap),
+      h("div", { class: "card" }, h("h3", { id: "places-title", text: "Places" }), h("p", { class: "muted small", text: "Tick every place Ava may search in. A country includes all its states." }), h("label", { class: "searchbox inline" }, icon("search", 16), search), geo.wrap),
       summary, note(t.notice), button, why,
       h("p", { class: "muted small", text: "Only the owner of this company can save this. Each change is kept as a new version, so the earlier choice is never lost." }));
     refresh();
@@ -103,18 +106,18 @@ export function createTargets(ctx) {
   const fill = (el, ...kids) => el.replaceChildren(...kids.flat(2).filter((k) => k !== null && k !== undefined && k !== false));
 
   function render() {
-    const t = tg() ?? (app.targets = { phase: "loading" });
+    const t = tg() ?? (app.targets = { phase: "loading", notice: null, done: null });
+    if (t.phase === "loading" && !t.begun) { t.begun = true; queueMicrotask(begin); }
     return [
-      h("button", { class: "back always", type: "button", onclick: () => ctx.go("goals") }, icon("back", 18), "Goals"),
       h("h1", { class: "page-title", text: "Who you target" }),
       h("p", { class: "mainnote", text: "Ava only searches inside what you choose here. A goal has to fit inside it before you can confirm it." }),
       t.phase === "loading" ? h("p", { class: "empty", text: "Loading…" }) : null,
-      t.phase === "error" ? [note(t.notice), h("button", { class: "btn primary", type: "button", onclick: open }, "Try again")] : null,
+      t.phase === "error" ? [note(t.notice), h("button", { class: "btn", type: "button", onclick: open }, "Try again")] : null,
       t.phase === "edit" || t.phase === "saving" ? editor() : null,
       t.phase === "done" ? h("div", { class: "card" }, h("div", { class: "notice", role: "status", text: "Saved. Who you target is now set." }), h("p", { class: "strong", text: t.done }),
-        h("p", { class: "muted small", text: "A goal that was waiting for your OK can now be reviewed again from the Goals list." }),
-        h("button", { class: "btn primary block bigbtn", type: "button", onclick: () => ctx.go("goals") }, "Back to my goals"),
-        h("button", { class: "btn ghost block", type: "button", onclick: open }, "Change it again")) : null,
+        h("p", { class: "muted small", text: "A goal that was waiting for your OK can now be reviewed again from your goals." }),
+        h("button", { class: "btn primary", type: "button", onclick: () => ctx.go("home", "goals") }, "Back to my goals"),
+        h("button", { class: "btn", type: "button", onclick: open }, "Change it again")) : null,
     ];
   }
 

@@ -4,15 +4,18 @@
 // Uses only the owner-only functions simulate_reply and set_reply_category, and the outreach helper (ids only).
 import { CATEGORIES, categoryWords, categoryTone, NEEDS_NEXT_STEP, SIM_EXAMPLES, repliesView, replyTargets, resultLine, reasonWords, startRefusal } from "./outreach-logic.js";
 import { timeAgo } from "./text.js";
+import { pager, stateBlock } from "./ui.js";
+
+const PAGE = 10;
 
 export function createInbox(ctx) {
   const { h, icon, state: app } = ctx;
-  const fresh = () => ({ company: "", text: "", working: false, notice: null, aiNote: null, lines: [] });
+  const fresh = () => ({ page: 0, company: "", text: "", working: false, notice: null, aiNote: null, lines: [] });
   const st = () => app.ib ?? (app.ib = fresh());
   const set = (patch) => { Object.assign(st(), patch); ctx.render(); };
   const employee = () => (app.data ? app.data.employees.find((e) => e.status === "active") || app.data.employees[0] || null : null);
 
-  function open() { app.ib = fresh(); ctx.go("inbox"); }
+  function open() { app.ib = fresh(); ctx.go("outreach", "replies"); }
 
   async function simulate() {
     const s = st();
@@ -61,7 +64,7 @@ export function createInbox(ctx) {
     if (!results) return;
     await ctx.reload(true);
     const r = results[0];
-    set({ working: false, notice: { tone: r?.status === "done" ? "good" : "warn", text: r?.status === "done" ? "A reply is written and waiting for you on the Approve screen." : reasonWords(r?.reason, "draft") } });
+    set({ working: false, notice: { tone: r?.status === "done" ? "good" : "warn", text: r?.status === "done" ? "A reply is written and waiting for you in To approve." : reasonWords(r?.reason, "draft") } });
   }
 
   const note = (n) => (n ? h("div", { class: `notice ${n.tone}`, role: "status", text: n.text }) : null);
@@ -76,8 +79,8 @@ export function createInbox(ctx) {
       rec.category === "unsubscribe" ? h("p", { class: "muted small", text: "This company is do-not-contact. Ava will not write to it again." }) : null,
       ai ? h("div", { class: "notice warn", role: "status" }, ai.needsKey ? [h("strong", { text: "Needs the AI key. " }), "Ava cannot sort this herself yet. Choose the kind of reply by hand below; everything else works the same."] : ai.text) : null,
       h("div", { class: "chips", role: "group", "aria-label": "What kind of reply is this?" }, CATEGORIES.map((c) => h("button", { type: "button", "aria-pressed": String(rec.category === c.key), disabled: busy, title: c.hint, onclick: () => choose(rec, c.key) }, c.label))),
-      !rec.category ? h("button", { class: "btn ghost", type: "button", disabled: busy, onclick: () => sortWithAva(rec) }, icon("refresh", 18), "Ask Ava to sort it") : null,
-      NEEDS_NEXT_STEP.has(rec.category) ? (hasDraft ? h("p", { class: "muted small", text: "A reply for this is on the Approve screen." }) : h("button", { class: "btn primary", type: "button", disabled: busy, onclick: () => writeNext(rec) }, icon("outreach", 18), "Write a reply for me to approve")) : null);
+      !rec.category ? h("button", { class: "btn", type: "button", disabled: busy, onclick: () => sortWithAva(rec) }, icon("sparkles", 16), "Ask Ava to sort it") : null,
+      NEEDS_NEXT_STEP.has(rec.category) ? (hasDraft ? h("p", { class: "muted small", text: "A reply for this is waiting in To approve." }) : h("button", { class: "btn", type: "button", disabled: busy, onclick: () => writeNext(rec) }, icon("outreach", 16), "Write a reply for me to approve")) : null);
   }
 
   function render() { return renderBody().flat(Infinity).filter((k) => k !== null && k !== undefined && k !== false); }
@@ -85,18 +88,18 @@ export function createInbox(ctx) {
     const s = st(), d = app.data;
     const targets = replyTargets(d.records, d.pipeline), replies = repliesView(d.records, d.assessments, d.pipeline);
     return [
-      h("h1", { class: "page-title", text: "Inbox" }),
+      h("div", { class: "page-h" }, h("h1", { text: "Replies" }), h("span", { class: "tag", text: `${replies.length}` })),
       h("p", { class: "mainnote", text: "Replies arrive here. In test mode no real reply can arrive, so you can type one yourself below to see what Ava would do." }),
       note(s.notice),
       h("div", { class: "card" }, h("h3", { text: "Simulate a reply" }),
         h("p", { class: "muted small", text: "Pretend a company wrote back. Nothing is sent to anyone. If the words sound like “please stop”, the company is marked do-not-contact straight away." }),
-        targets.length === 0 ? h("p", { class: "muted", text: "No message has been sent yet, so there is nobody to reply. Approve and send a first email first (Approve screen)." }) : [
+        targets.length === 0 ? h("p", { class: "muted", text: "No message has been sent yet, so there is nobody to reply. Approve and send a first email first (To approve)." }) : [
           h("label", { class: "field" }, "Which company is the reply from?", h("select", { class: "pick", onchange: (e) => { s.company = e.target.value; } }, h("option", { value: "", text: "Choose a company" }), targets.map((t) => h("option", { value: t.subject_id, text: t.name, selected: s.company === t.subject_id })))),
           h("label", { class: "field" }, "What does the reply say?", h("textarea", { rows: 4, class: "listbox", maxlength: 4000, oninput: (e) => { s.text = e.target.value; } }, s.text)),
           h("div", { class: "chips", role: "group", "aria-label": "Examples" }, SIM_EXAMPLES.map((x) => h("button", { type: "button", onclick: () => set({ text: x }) }, x.length > 30 ? `${x.slice(0, 28)}…` : x))),
-          h("button", { class: "btn primary", type: "button", disabled: s.working, onclick: simulate }, icon("inbox", 18), s.working ? "Saving…" : "Add this reply")]),
-      h("h2", { class: "sectitle" }, `Replies (${replies.length})`),
-      replies.length === 0 ? h("p", { class: "muted", text: "No replies yet." }) : replies.map(replyCard),
+          h("button", { class: "btn primary", type: "button", disabled: s.working, onclick: simulate }, icon("inbox", 16), s.working ? "Saving…" : "Add this reply")]),
+      h("h2", { class: "label13" }, `Replies (${replies.length})`),
+      replies.length === 0 ? stateBlock({ icon: "inbox", title: "No replies yet", text: "When a company writes back, it shows up here. You can add a pretend one above.", inline: true }) : [replies.slice(s.page * PAGE, s.page * PAGE + PAGE).map(replyCard), pager({ page: s.page, size: PAGE, total: replies.length, onPage: (p) => set({ page: p }), noun: "replies" })],
     ];
   }
 

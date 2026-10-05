@@ -25,11 +25,11 @@ const DRAFT = {
   company_opted_out: "This company is marked do-not-contact, so Ava cannot write to it.",
   no_contact_email: "This company has no contact with an email address. Add one in your list and import again.",
   no_contact_available: "Everyone at this company with an email address has opted out.",
-  no_template: "There is no approved message template yet. Write and approve one in Message templates.",
+  no_template: "There is no approved message template yet. Write and approve one under Templates.",
   template_problem: "The message template could not be filled in. Check it in Message templates.",
-  company_info_missing_name: "Your company name is missing. Add it in Company information.",
+  company_info_missing_name: "Your company name is missing. Add it under Company, in Company information.",
   company_info_missing_offer: "You have not listed what you offer yet. Add a product or service in Company information.",
-  org_suspended: "Emergency stop is on, so Ava did nothing. Resume her first.",
+  org_suspended: "Ava is paused, so she did nothing. Resume her first.",
   company_not_found: "That company could not be found.",
   no_intro_sent: "No first email has been sent to this company yet.",
   already_replied: "They already replied, so no follow-up is needed.",
@@ -43,7 +43,7 @@ const SEND = {
   approval_needed_again: "The approval was already used. Approve it again to send.",
   company_opted_out: "This company is marked do-not-contact, so the message was not sent.",
   contact_opted_out: "This person asked not to be contacted, so the message was not sent.",
-  org_suspended: "Emergency stop is on, so nothing was sent.",
+  org_suspended: "Ava is paused, so nothing was sent.",
   no_email: "This person has no email address.",
   outbound_mode_not_test: "Sending is only allowed in test mode.",
   test_inbox_not_set: "Your test inbox address has not been added yet. This is a step only you can do.",
@@ -70,7 +70,7 @@ export function reasonWords(code, area = "draft") {
   if (/^authorization_/.test(c)) {
     if (/not_authorized/.test(c)) return area === "sort" ? "Ava is not allowed to judge yet. Switch on “Judge whether a company is a good fit” in What Ava may do." : "Ava is not allowed to contact companies yet. Switch the permission on in What Ava may do.";
     if (/subject_restricted/.test(c)) return "This company is marked do-not-contact.";
-    if (/org_suspended/.test(c)) return "Emergency stop is on, so Ava did nothing.";
+    if (/org_suspended/.test(c)) return "Ava is paused, so she did nothing.";
     return "Ava was not allowed to do that.";
   }
   if (/^connector_/.test(c)) return "The email sender was not allowed to run. Nothing was sent.";

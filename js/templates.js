@@ -16,7 +16,7 @@ export function createTemplates(ctx) {
     if (!st()) return;
     set(r.ok ? { loaded: true, failed: false, k: shapeKnowledge(r.rows, r.versions) } : { loaded: true, failed: true });
   }
-  function open() { app.tpl = fresh(); ctx.go("templates"); load(); }
+  function open() { app.tpl = fresh(); ctx.go("outreach", "templates"); }
 
   const savedOf = (key) => { const v = st().k?.templates?.[key]?.value; return v && typeof v === "object" ? { name: String(v.name ?? ""), channel: "email", subject: String(v.subject ?? ""), body: String(v.body ?? "") } : null; };
   const currentOf = (kind) => st().drafts[kind.key] ?? savedOf(kind.key) ?? { ...kind.starter };
@@ -59,20 +59,20 @@ export function createTemplates(ctx) {
       h("div", { class: "card inner" }, h("h4", { text: "How it will look (with made-up example details)" }), h("p", { class: "strong", id: `tpl-ps-${kind.key}`, text: fillSample(t.subject) }), h("p", { class: "prewrap", id: `tpl-pb-${kind.key}`, text: fillSample(t.body) })),
       problem ? h("p", { class: "small warnText", id: `tpl-pr-${kind.key}`, text: problem }) : h("p", { class: "small warnText", id: `tpl-pr-${kind.key}` }),
       info ? h("p", { class: "muted small", text: `Current approved version ${info.version_no}${info.confirmed_at ? `, approved on ${when(info.confirmed_at)}` : ""}. ${info.versions} ${info.versions === 1 ? "version" : "versions"} kept.` }) : null,
-      h("button", { class: "btn primary block bigbtn", type: "button", id: `tpl-save-${kind.key}`, disabled: !!s.working || !!problem || !changed(kind), onclick: () => save(kind) }, icon("check", 20), busy ? "Saving…" : "Save and approve this wording"));
+      h("button", { class: `btn${!s.working && !problem && changed(kind) ? " primary" : ""}`, type: "button", id: `tpl-save-${kind.key}`, disabled: !!s.working || !!problem || !changed(kind), onclick: () => save(kind) }, icon("check", 16), busy ? "Saving…" : "Save and approve this wording"));
   }
   /** Updates the preview, the problem line and the Save button as the owner types, without re-drawing the page (so the cursor stays put). */
   function refresh(kind) {
     const t = currentOf(kind), problem = templateProblem(t);
     const set1 = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
     set1(`tpl-ps-${kind.key}`, fillSample(t.subject)); set1(`tpl-pb-${kind.key}`, fillSample(t.body)); set1(`tpl-pr-${kind.key}`, problem ?? "");
-    const b = document.getElementById(`tpl-save-${kind.key}`); if (b) b.disabled = !!st().working || !!problem || !changed(kind);
+    const b = document.getElementById(`tpl-save-${kind.key}`); if (b) { b.disabled = !!st().working || !!problem || !changed(kind); b.classList.toggle("primary", !b.disabled); }
   }
 
   function render() {
     const s = st() ?? (app.tpl = fresh());
+    if (!s.loaded && !s.began) { s.began = true; queueMicrotask(load); }
     return [
-      h("button", { class: "back always", type: "button", onclick: () => ctx.go("home") }, icon("back", 18), "Home"),
       h("h1", { class: "page-title", text: "Message templates" }),
       h("p", { class: "mainnote", text: "The wording Ava may use for a first email and a follow-up. She fills in the blanks and cannot change your words. You approve each version, and you approve every finished draft before anything is sent." }),
       note(s.notice),

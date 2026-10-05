@@ -1,43 +1,51 @@
-/* Colours and type for the design preview. Green + black + white. Light and dark.
-   "auto" follows the device; the preview control can force Light or Dark (data-theme on the page). */
+/* Ava owner dashboard, look 3. Fonts are bundled (no outside request). Colours are the approved tokens, light and dark.
+   Appearance "Auto" follows the device; Light and Dark are forced with data-theme on the page.
+   Colour rules: green only for the ONE main button on a screen, the selected menu item, and "on" or "healthy". Amber = needs attention. Red = paused, danger, errors. */
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/dm-sans-400.woff2") format("woff2"); }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 500; font-display: swap; src: url("../fonts/dm-sans-500.woff2") format("woff2"); }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 600; font-display: swap; src: url("../fonts/dm-sans-600.woff2") format("woff2"); }
+
 :root {
-  --bg: #f3f7f5; --panel: #ffffff; --card: #ffffff; --tile: #e3f5ec; --tile-ink: #0b6b43; --line: #dde7e1; --hover: #eef5f1; --selected: #e3f5ec;
-  --ink: #0f1713; --muted: #55655d; --faint: #8a9992;
-  --accent: #0c8a55; --accent-ink: #ffffff; --accent-soft: #d3efe0;
-  --hero: #0c8a55; --hero-ink: #ffffff; --hero-soft: rgba(255, 255, 255, 0.18);
-  --good: #0b6b43; --good-bg: #dff3e8; --warn: #8a4b00; --warn-bg: #fff1d6; --bad: #a3231a; --bad-bg: #fde6e3; --soon: #5a5f6b; --soon-bg: #eceef2;
-  --stop: #c42b1f; --stop-ink: #ffffff; --stop-bg: #fde6e3;
-  --pretend: #f59e0b; --pretend-ink: #1a1203;
-  --shadow: 0 1px 2px rgba(15, 23, 19, 0.06), 0 6px 18px rgba(15, 23, 19, 0.05);
-  --radius: 20px; --radius-sm: 14px;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --bg: #fbfbfa; --panel: #f4f5f3; --rail: #eef0ed; --card: #ffffff; --line: #e2e5e1; --text: #141916; --muted: #5a655e;
+  --accent: #0b7f58; --accentText: #0a7a55; --accentSoft: rgba(11, 127, 88, .10); --onAccent: #ffffff; --dot: #18a36b;
+  --warn: #8a5d05; --warnSoft: rgba(138, 93, 5, .10); --danger: #b83232; --dangerSoft: rgba(184, 50, 50, .08); --track: #e6e9e5; --sel: #e9ece8;
+  --overlay: rgba(20, 25, 22, .38);
+  --font: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --s: 1;
+  --row: 44px;
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0b0d0c; --panel: #121514; --card: #1a1e1c; --tile: #14302a; --tile-ink: #3fe0b2; --line: #272d2a; --hover: #1d2220; --selected: #17342d;
-    --ink: #f3f6f4; --muted: #a0aca6; --faint: #6f7c76;
-    --accent: #2bd9aa; --accent-ink: #04201a; --accent-soft: #123a31;
-    --hero: #22cfa1; --hero-ink: #03211a; --hero-soft: rgba(3, 33, 26, 0.16);
-    --good: #4fe3b6; --good-bg: #123a31; --warn: #ffc56b; --warn-bg: #3a2a0a; --bad: #ff9a90; --bad-bg: #3d1713; --soon: #a9b1bd; --soon-bg: #232830;
-    --stop: #ff5a4d; --stop-ink: #1b0300; --stop-bg: #3d1713;
-    --shadow: none;
+    --bg: #0d0f0e; --panel: #101312; --rail: #0b0d0c; --card: #141816; --line: #232927; --text: #e2e6e3; --muted: #9aa59f;
+    --accent: #2fbf7c; --accentText: #52d89b; --accentSoft: rgba(47, 191, 124, .13); --onAccent: #06150e; --dot: #3dd68c;
+    --warn: #e8b65f; --warnSoft: rgba(232, 182, 95, .12); --danger: #ff7a7a; --dangerSoft: rgba(255, 122, 122, .10); --track: #252c29; --sel: #181d1b;
+    --overlay: rgba(0, 0, 0, .55);
+    color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0b0d0c; --panel: #121514; --card: #1a1e1c; --tile: #14302a; --tile-ink: #3fe0b2; --line: #272d2a; --hover: #1d2220; --selected: #17342d;
-  --ink: #f3f6f4; --muted: #a0aca6; --faint: #6f7c76;
-  --accent: #2bd9aa; --accent-ink: #04201a; --accent-soft: #123a31;
-  --hero: #22cfa1; --hero-ink: #03211a; --hero-soft: rgba(3, 33, 26, 0.16);
-  --good: #4fe3b6; --good-bg: #123a31; --warn: #ffc56b; --warn-bg: #3a2a0a; --bad: #ff9a90; --bad-bg: #3d1713; --soon: #a9b1bd; --soon-bg: #232830;
-  --stop: #ff5a4d; --stop-ink: #1b0300; --stop-bg: #3d1713;
-  --shadow: none;
+  --bg: #0d0f0e; --panel: #101312; --rail: #0b0d0c; --card: #141816; --line: #232927; --text: #e2e6e3; --muted: #9aa59f;
+  --accent: #2fbf7c; --accentText: #52d89b; --accentSoft: rgba(47, 191, 124, .13); --onAccent: #06150e; --dot: #3dd68c;
+  --warn: #e8b65f; --warnSoft: rgba(232, 182, 95, .12); --danger: #ff7a7a; --dangerSoft: rgba(255, 122, 122, .10); --track: #252c29; --sel: #181d1b;
+  --overlay: rgba(0, 0, 0, .55);
+  color-scheme: dark;
 }
+/* text size (Settings > General) and row density */
+:root[data-size="small"] { --s: .93; }
+:root[data-size="large"] { --s: 1.14; }
+:root[data-density="compact"] { --row: 36px; }
+
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--font); }
+html { font-size: calc(14px * var(--s)); -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 400 1rem/1.5 var(--font); -webkit-font-smoothing: antialiased; }
 [hidden] { display: none !important; }
-button { font: inherit; color: inherit; }
-h1, h2, h3, p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3, h4, p { margin: 0; }
+h1, h2, h3, h4, strong, b { font-weight: 600; }
+a { color: inherit; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: 6px; }
+::selection { background: var(--accentSoft); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+.ico { flex: 0 0 auto; display: block; }

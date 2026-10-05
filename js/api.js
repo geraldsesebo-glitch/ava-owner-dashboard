@@ -3,7 +3,7 @@
 // Everything is checked by the database against the signed-in person's own membership - this file decides nothing about who may do what.
 import { SUPABASE_URL, ANON_KEY } from "./config.js";
 
-const KEY = "ava_owner_dashboard_v2_session_v1";
+const KEY = "ava_owner_dashboard_v3_session_v1";
 let session = load();
 let refreshing = null;
 const signedOutListeners = new Set();
@@ -102,4 +102,17 @@ export function rpc(name, args) {
 /** Calls a search helper. Only ids are sent: never a provider, a run, a page or a limit. */
 export function callHelper(functionName, body) {
   return authed(`${SUPABASE_URL}/functions/v1/${encodeURIComponent(functionName)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+}
+
+/** The owner's first name if the sign-in already carries one (read from the sign-in itself; nothing is fetched, and an email address is never used). */
+export function ownerFirstName() {
+  try {
+    const part = session?.access_token?.split(".")[1];
+    if (!part) return "";
+    const json = JSON.parse(decodeURIComponent(escape(atob(part.replace(/-/g, "+").replace(/_/g, "/")))));
+    const m = json?.user_metadata && typeof json.user_metadata === "object" ? json.user_metadata : {};
+    const raw = [m.first_name, m.given_name, m.full_name, m.name].find((x) => typeof x === "string" && x.trim() !== "");
+    const first = raw ? raw.trim().split(/\s+/)[0] : "";
+    return /^[\p{L}][\p{L}'’-]{0,30}$/u.test(first) && !first.includes("@") ? first : "";
+  } catch { return ""; }
 }

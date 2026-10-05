@@ -18,7 +18,7 @@ export function createResearch(ctx) {
       if (st().stop) break;
       const res = await ctx.call("company-research", { org_id: app.orgId, ai_employee_id: emp.id, subject_ids: part });
       if (!res.ok || !Array.isArray(res.data?.results)) { set({ notice: { tone: "bad", text: startRefusal(res) } }); break; }
-      const lines = res.data.results.map((o) => ({ id: o.subject_id, tone: o.status === "done" ? "good" : o.status === "needs_website" ? "warn" : "bad", text: outcomeLine(o, nameOf(o.subject_id)) }));
+      const lines = res.data.results.map((o) => ({ id: o.subject_id, tone: o.status === "done" ? "good" : o.status === "needs_website" || o.status === "refused" ? "warn" : "bad", text: outcomeLine(o, nameOf(o.subject_id)) }));
       set({ done: st().done + res.data.results.length, lines: [...st().lines, ...lines] });
       // a company the platform would not allow (no permission, no price, limit reached) stops the whole run: asking again would only be refused again
       if (res.data.results.some((o) => o.status === "refused")) break;
@@ -46,7 +46,7 @@ export function createResearch(ctx) {
     if (!s.running && lines.length === 0 && !s.notice) return null;
     return h("div", { class: "card" },
       s.running ? h("p", { text: `Ava is reading… ${s.done} of ${s.total} done.` }) : h("p", { text: `Finished: ${s.done} of ${s.total}.` }),
-      s.running ? h("button", { class: "btn ghost", type: "button", disabled: s.stop, onclick: () => set({ stop: true }) }, s.stop ? "Stopping after this one…" : "Stop") : null,
+      s.running ? h("button", { class: "btn", type: "button", disabled: s.stop, onclick: () => set({ stop: true }) }, s.stop ? "Stopping after this one…" : "Stop") : null,
       note(s.notice),
       lines.length ? h("ul", { class: "plainlist" }, lines.map((l) => h("li", { class: l.tone, text: l.text }))) : null);
   }
@@ -57,7 +57,7 @@ export function createResearch(ctx) {
     return h("div", { class: "card" },
       h("h3", { text: "Research with Ava" }),
       h("p", { class: "muted small", text: "Ava reads each company's own public website (about three pages) and tells you how well it fits what you sell, with the exact words she relied on. Her answers are never marked as checked: that is for you to do. It costs a small amount of AI money (at most $0.02 per company per month) and nothing is sent to anyone." }),
-      h("button", { class: "btn primary", type: "button", disabled: s.running || ids.length === 0 || !emp, onclick: () => run(ids) }, icon("search", 18), ids.length ? `Research ${ids.length} ${ids.length === 1 ? "company" : "companies"}` : "Nothing to research right now"),
+      h("button", { class: "btn", type: "button", disabled: s.running || ids.length === 0 || !emp, onclick: () => run(ids) }, icon("sparkles", 16), ids.length ? `Research ${ids.length} ${ids.length === 1 ? "company" : "companies"}` : "Nothing to research right now"),
       progress());
   }
 
@@ -65,19 +65,19 @@ export function createResearch(ctx) {
   function detail(r) {
     const s = st(), emp = employee(), a = s.assess[r.subject_id];
     if (r.fit_label && a === undefined) loadAssessment(r.subject_id);
-    return h("div", { class: "card" }, h("h3", { text: "What Ava found out" }),
+    return h("div", { class: "card" }, h("h3", { text: "Why Ava thinks it fits" }),
       r.needs_website ? h("p", { text: "This company needs a website before Ava can read about it. Add one to your list and import again." }) : null,
-      r.fit_label ? h("div", { class: "row2" }, h("strong", { text: fitWords(r.fit_label) }), h("span", { class: `badge ${fitTone(r.fit_label)}`, text: r.fit_score != null ? `${r.fit_score} out of 100` : "" }), h("span", { class: "badge", text: "Not verified" })) : (!r.needs_website ? h("p", { class: "muted", text: "Ava has not read about this company yet." }) : null),
+      r.fit_label ? h("div", { class: "row2" }, h("strong", { text: fitWords(r.fit_label) }), h("span", {}, r.fit_score != null ? h("span", { class: "tag", text: `${r.fit_score} out of 100` }) : null, " ", h("span", { class: "tag warn", text: "Not verified" }))) : (!r.needs_website ? h("p", { class: "muted", text: "Ava has not read about this company yet." }) : null),
       a ? [
         a.reasons.length ? h("div", { class: "cardlist" }, a.reasons.map((x) => h("div", { class: "li" }, h("div", { text: x.text }), h("blockquote", { class: "quote", text: `“${x.quote}”` }), x.link ? h("a", { class: "textbtn", href: x.link, target: "_blank", rel: "noopener noreferrer", text: "Open the page it came from" }) : null))) : h("p", { class: "muted", text: "No reason passed the check that every quote really is on the page." }),
         a.missing ? h("p", { class: "muted small", text: `Not told by the pages: ${a.missing}` }) : null,
         a.discarded ? h("p", { class: "muted small", text: `${a.discarded} ${a.discarded === 1 ? "reason was" : "reasons were"} thrown away because the quote could not be found on the page.` }) : null,
         h("p", { class: "muted small", text: `Written by Ava's AI helper${a.when ? ` on ${a.when}` : ""}. It is a guess from public pages, not a checked fact.` }),
       ] : null,
-      !r.needs_website && !r.opted_out ? h("button", { class: "btn ghost block", type: "button", disabled: s.running || !emp, onclick: () => run([r.subject_id]) }, icon("search", 18), r.fit_label ? "Research again" : "Research this company") : null,
+      !r.needs_website && !r.opted_out ? h("button", { class: "btn", type: "button", disabled: s.running || !emp, onclick: () => run([r.subject_id]) }, icon("sparkles", 16), r.fit_label ? "Research again" : "Research with Ava") : null,
       r.opted_out ? h("p", { class: "muted small", text: "Marked do-not-contact, so Ava will not research it." }) : null,
       progress(r.subject_id));
   }
 
-  return { strip, detail, run };
+  return { strip, detail, run, progress, single: () => st().total === 1 };
 }
