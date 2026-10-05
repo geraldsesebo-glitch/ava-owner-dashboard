@@ -19,7 +19,7 @@ export const ASK_NOTE = "Allowing this does NOT send anything. Ava can only writ
 const plainAllowed = (key) => key === SEARCH_KEY || key === FIT_KEY;
 
 /** The one thing to say, clearly, about the search permission. */
-export const NO_SEARCH_NOTE = "Allowing Ava to search does NOT start any search. A search only runs when you press “Run a search now”, and no real data source is switched on yet, so nothing real can be searched. This only gives Ava the right to search later.";
+export const NO_SEARCH_NOTE = "Allowing Ava to search does NOT start any search. A search only runs when you press “Run a search for this goal”, and no real data source is switched on yet, so nothing real can be searched. This only gives Ava the right to search later.";
 
 const plainObj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
 

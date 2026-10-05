@@ -84,7 +84,7 @@ export function runSentence(run, goalQuantity, found) {
   const reason = run.termination_reason;
   switch (run.status) {
     case "running":
-      return { text: "A search is partway through. Press “Run a search now” to continue.", tone: "wait", code: null };
+      return { text: "A search is partway through. Press “Run a search for this goal” to continue.", tone: "wait", code: null };
     case "completed":
       return { text: `Finished: found all ${want} ${COMPANY_WORD(want)} you asked for.`, tone: "good", code: null };
     case "partial": {
@@ -442,7 +442,7 @@ export function homeStatus({ org, employee, latestRun, runningStale, activeJobs 
   if (employee.status !== "active") return { key: "stopped", title: "Ava is switched off", line: `${employee.name} is not active.` };
   if (latestRun && latestRun.status === "running") {
     return runningStale
-      ? { key: "waiting", title: "A search stopped partway", line: "Press “Run a search now” to carry on." }
+      ? { key: "waiting", title: "A search stopped partway", line: "Press “Run a search for this goal” to carry on." }
       : { key: "searching", title: "Searching now", line: "A search is in progress." };
   }
   if (activeJobs > 0) return { key: "working", title: "Working", line: `${activeJobs} job${activeJobs === 1 ? " is" : "s are"} in progress.` };
