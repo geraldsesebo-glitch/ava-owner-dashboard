@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="referrer" content="no-referrer" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#0d0f0e" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Ava" />
+<!-- Only this page's own files and the project address are allowed. Nothing else can run or be contacted. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src https://mlkknzwrzjqxydgsbqtu.supabase.co; base-uri 'none'; form-action 'none'" />
+<title>Ava</title>
+<link rel="icon" href="data:," />
+<link rel="stylesheet" href="./css/theme.css" />
+<link rel="stylesheet" href="./css/layout.css" />
+<link rel="stylesheet" href="./css/parts.css" />
+<link rel="stylesheet" href="./css/screens.css" />
+</head>
+<body>
+
+<!-- SIGN IN -->
+<main id="signin" class="signin" hidden>
+  <div class="card signin-card">
+    <div class="brand big" aria-hidden="true">A</div>
+    <h1>Ava</h1>
+    <p class="muted">Owner dashboard (new look, preview). Sign in with your owner email and password.</p>
+    <form id="signin-form" autocomplete="on">
+      <label class="field" for="email">Email</label>
+      <input id="email" name="username" type="email" autocomplete="username" required />
+      <label class="field" for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required />
+      <button id="signin-btn" class="btn primary block" type="submit">Sign in</button>
+      <p id="signin-error" class="notice bad" role="alert" hidden></p>
+    </form>
+    <p class="muted small">Only people who belong to a company can see anything. Nothing here can be seen or changed without signing in.</p>
+  </div>
+</main>
+
+<!-- THE DASHBOARD -->
+<div class="app" id="app" hidden>
+  <div class="pausebar" id="pausebar" role="alert" hidden></div>
+  <nav class="strip" id="strip" aria-label="Main menu"></nav>
+  <header class="top" id="top"></header>
+  <aside class="panel" id="panel" aria-label="In this section"></aside>
+  <main class="main" id="main" tabindex="-1"></main>
+  <nav class="tabbar" id="tabbar" aria-label="Main menu"></nav>
+</div>
+<div id="sheet-root"></div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

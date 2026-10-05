@@ -1,0 +1,84 @@
+/* Screen-specific styles: Home, Goals, Companies (list, board, details beside the list), Outreach, Connectors, Settings, Activity. */
+
+.signin { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 20px; background: var(--bg); }
+.signin-card { width: min(26rem, 100%); }
+.signin-card h1 { font-size: 22px; margin: 6px 0 2px; }
+.signin-card input { margin-top: 6px; }
+.signin-card .btn { margin: 18px 0 10px; }
+
+/* ---- Home ---- */
+.home { max-width: 44rem; padding-top: 28px; }
+.greet { font-size: 22px; font-weight: 600; margin: 0 0 16px; }
+.goalbox { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 12px; margin-bottom: 14px; }
+.goalbox:focus-within { border-color: var(--muted); }
+.goalbox textarea { border: 0; background: transparent; padding: 0; margin: 0; min-height: 84px; font-size: 1.1rem; outline: none; resize: none; }
+.goalbox-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.goalbox .notice { margin: 10px 0 0; }
+.shortcuts { margin: 0 0 28px; }
+.review h2.cardtitle { font-size: 1.15rem; margin-bottom: 6px; }
+.setup { margin-top: 8px; }
+.setup .label13, .home .label13 { margin-top: 8px; }
+.pad { padding: 4px 10px; }
+.row2.gap { align-items: center; margin-top: 8px; }
+
+/* ---- Goals ---- */
+.kv.first { margin-top: 0; }
+
+/* ---- Companies ---- */
+.cosplit { position: relative; }
+.cosplit.has-drawer { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: start; }
+.co-main { min-width: 0; }
+.toolgroup { display: contents; }
+.drawer { background: var(--card); border: 1px solid var(--line); border-radius: 12px; position: sticky; top: 0; max-height: calc(100vh - 56px - 48px); max-height: calc(100dvh - 56px - 48px); overflow: hidden; display: flex; flex-direction: column; }
+.drawer-h { display: flex; align-items: flex-start; gap: 12px; padding: 16px 16px 12px; border-bottom: 1px solid var(--line); }
+.drawer-h h2 { font-size: 1.15rem; margin-bottom: 8px; overflow-wrap: anywhere; }
+.drawer-h .grow { flex: 1 1 auto; min-width: 0; }
+.drawer .tags, .bcard .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.drawer-b { padding: 14px 16px 18px; overflow-y: auto; }
+.drawer-b .card { padding: 14px 14px; }
+.drawer-b .card:last-child { margin-bottom: 0; }
+.drawer-b .kv { grid-template-columns: 6.5rem minmax(0, 1fr); }
+
+.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(230px, 1fr); gap: 12px; overflow-x: auto; padding: 14px; align-items: start; }
+.bcol { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; min-width: 0; }
+.bcol h3 { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); padding: 2px 4px 8px; }
+.bcard { display: grid; gap: 3px; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; }
+.bcard:hover, .bcard[aria-pressed="true"] { border-color: var(--muted); }
+.bcard .t { font-weight: 500; overflow-wrap: anywhere; }
+.bcard .s { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.bcard .tags { margin-top: 2px; }
+.stagechips { padding: 10px 14px 0; }
+
+/* the details open as a panel over the page when the screen is not wide enough to sit beside the list */
+@media (max-width: 1299px) {
+  .cosplit.has-drawer { display: block; }
+  .drawer { position: fixed; z-index: 15; top: 96px; right: 0; bottom: 0; width: min(420px, 100%); border-radius: 12px 0 0 0; max-height: none; border-right: 0; }
+}
+@media (max-width: 899px) {
+  .drawer { top: 0; left: 0; width: 100%; border-radius: 0; border: 0; z-index: 25; }
+  .drawer-h { padding-top: calc(14px + env(safe-area-inset-top)); }
+  .board { display: block; padding: 8px 14px 14px; }
+  .bcol { display: none; background: transparent; border: 0; padding: 0; }
+  .bcol[data-on="true"] { display: block; }
+  .bcol h3 { display: none; }
+  .bcard { padding: 12px 14px; }
+  .toolbar { padding: 10px 12px; }
+  .toolbar .searchbox { max-width: none; height: 44px; }
+  #co-q, #goal-q { font-size: 1rem; }
+  .stagechips { padding: 10px 0 0; }
+  .chiprow { margin: 0 -14px 10px; padding: 0 14px 2px; }
+  .page-h .seg { order: 5; }
+  .home { padding-top: 6px; }
+}
+
+/* with the details open the list keeps its main columns only */
+.has-drawer .tbl .c-place, .has-drawer .tbl .c-website, .has-drawer .tbl .c-contact, .has-drawer .tbl .c-source { display: none; }
+
+.has-drawer .page-h .btn .lbl { display: none; }
+.has-drawer .page-h .btn { padding: 0 10px; }
+@media (max-width: 899px) {
+  .hero-action { width: 100%; margin-top: 8px; }
+  .kv { grid-template-columns: 6.5rem minmax(0, 1fr); gap: 6px 12px; }
+  .kv dd { margin-bottom: 0; }
+  .drawer-b .kv { grid-template-columns: 6rem minmax(0, 1fr); }
+}
